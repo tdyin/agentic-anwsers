@@ -189,3 +189,32 @@ file reads/tools. It completed in 4,398 ms. Browser acceptance, follow persisten
 explicit unwatch, and model-context delivery therefore pass for this path. The
 verification was API-triggered in the previously desktop-verified thread; no new
 native desktop UI observation is claimed.
+
+## Multi-page disconnected recovery (2026-10-04)
+
+The private acceptance harness disconnected the actual App Server delivery worker,
+created 101 real Answer comments, and then reconnected it. One more comment was
+created while its first recovery batch was in flight. The worker delivered all
+102 distinct notification IDs in measured batches of 100, 1, and 1, without
+marking any read. MCP reads retrieved the comments before five notifications
+were explicitly acknowledged. After restarting the disposable Answer container,
+a fresh worker with no retained cursor/deduplication memory recovered exactly
+97 remaining unread records. Revoking its credential blocked MCP calls and
+subsequent notification reconnects.
+
+Before an explicit verification turn, the target thread's latest turn was still
+`01a108fc-3034-7071-a46e-043d1f6c96e8`: recovery itself had started no model turn.
+Verification turn `01a1090a-1a9d-7331-96b1-237254395404` then recalled all 97 IDs,
+`22` through `118` inclusive, in order. Its first and last records exactly matched
+the source: recipient `4`, actor `1`, topic `10010000000000041`, comment objects
+`10070000000000048` and `10070000000000144`. The prompt supplied no expected IDs
+or count. The turn contained only the user prompt and model response, used no
+tools, and completed in 11,256 ms.
+
+Reproduce with `ACCEPTANCE_PRIVATE=1`, `ACCEPTANCE_APP_SERVER_URL` and
+`ACCEPTANCE_APP_SERVER_THREAD` targeting the configured shared desktop server,
+then run `node mcp/scripts/acceptance.js`. All three integration tests passed.
+Without the App Server environment variables, this recovery test uses a real
+WebSocket protocol fixture; that mode is transport regression evidence only.
+This run proves Answer container persistence and fresh notification-worker
+recovery, not a full MCP container restart or fresh native desktop UI observation.
