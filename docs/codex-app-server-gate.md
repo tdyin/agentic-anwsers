@@ -128,3 +128,36 @@ node mcp/scripts/acceptance.js
 The harness prints the source notification IDs for independent context
 verification. Omit `ACCEPTANCE_MCP_IMAGE` for this host-socket fixture. This run is
 not evidence that a macOS Unix socket is reachable from a Linux MCP container.
+
+## Real comment and mention context (2026-10-04)
+
+The expanded host-service fixture passed against Answer fork `0a5de61d`, also
+running real Chrome owner posting and the atomic acknowledgement regression. It
+covered question comments, an answer author's comment on their own answer,
+watch/mention overlap with repeated mention names, a mention without a watch
+while replying to a different user, explicit unwatch, and self suppression.
+
+All five expected records were accepted by the App Server worker and independently
+recalled by the model in thread `01a108b3-eb21-7be2-9d2f-8c95f3f1face`:
+
+| Kind | Notification ID | Changed comment ID |
+| --- | --- | --- |
+| `comment.created` | `5` | `10070000000000032` |
+| `comment.created` | `7` | `10070000000000033` |
+| `mention` | `8` | `10070000000000034` |
+| `mention` | `12` | `10070000000000037` |
+| `comment.created` | `15` | `10070000000000039` |
+
+Each had recipient `2` and topic `10010000000000025`. The verification prompt
+supplied no expected IDs and requested existing context only. Turn
+`01a108ef-7ddf-7ef0-8482-1a514796fcd4` contains only the test user message and the
+exact five-record JSON response, completed in 7,652 ms. Before this explicitly
+triggered verification, the most recent turn was still the previous test turn:
+live Answer activity had not started any model turn automatically.
+
+These are a new disposable Answer installation's local IDs, not globally unique
+identifiers across separate forum installations. The comment/mention records
+were new in this test thread; earlier real-event verification covered answers.
+Fresh desktop-UI observation remains pending Accessibility permission. This run
+establishes real forum-to-model delivery through the previously desktop-verified
+shared server, not a new UI-observation claim or production deployment approval.
