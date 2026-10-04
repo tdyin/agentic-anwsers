@@ -59,3 +59,12 @@ The fork changes unread state atomically; only the first successful transition
 updates the unread badge. Repeated and concurrent acknowledgement requests cannot
 consume the badge count of unrelated unread notifications. The SQLite regression
 issues 20 concurrent requests and verifies exactly one transition.
+
+## Resolution
+
+Resolution uses Answer's accepted-answer state. The acceptance activity emits one
+inbox notification for the accepted answer independently of which reputation
+activity rows exist, including self-accepted answers. Self recipients are
+suppressed while other followers still receive the event. No follow is removed
+automatically. Real Chrome acceptance, native state readback, live delivery, and
+explicit MCP unwatch are covered by the private browser fixture.

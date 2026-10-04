@@ -41,7 +41,7 @@ jobs:
         working-directory: mcp
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: mcp
-      - run: docker run --rm -v "$PWD/vendor/answer:/src" -w /src golang:1.25-alpine go test ./internal/base/middleware ./internal/service/auth ./internal/service/notification_common ./internal/service/notification ./internal/repo/notification ./internal/controller ./internal/service/comment ./internal/service/review ./internal/service/noticequeue
+      - run: docker run --rm -v "$PWD/vendor/answer:/src" -w /src golang:1.25-alpine go test ./internal/base/middleware ./internal/service/auth ./internal/service/notification_common ./internal/service/notification ./internal/repo/notification ./internal/controller ./internal/service/comment ./internal/service/review ./internal/service/noticequeue ./internal/service/content ./internal/repo/activity
       - run: docker build -t agentic-answer:private vendor/answer
       - run: docker build -t agentic-acceptance-mcp mcp
       - run: pnpm test:acceptance

@@ -2,10 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
 import { execFileSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import { acceptanceWatcher } from '../scripts/acceptance-watcher.js';
 
 test('private Answer maps trusted owner and denies public or forged ingress', {
   skip: !process.env.ACCEPTANCE_INTERNAL_TOKEN,
-}, async () => {
+}, async t => {
   const base = process.env.ACCEPTANCE_ANSWER_URL;
   const owner = { 'Tailscale-User-Login': 'owner@example.com' };
   const internal = { 'X-Answer-Internal-Token': process.env.ACCEPTANCE_INTERNAL_TOKEN };
@@ -35,6 +37,11 @@ test('private Answer maps trusted owner and denies public or forged ingress', {
   assert.equal(forged, '403', 'direct backend socket cannot forge a trusted proxy peer');
   if (process.env.ACCEPTANCE_BROWSER === '1') {
     const { chromium } = await import('playwright');
+    const recipient = await acceptanceWatcher(t, { baseUrl: base, internalToken: process.env.ACCEPTANCE_INTERNAL_TOKEN,
+      ...(process.env.ACCEPTANCE_APP_SERVER_URL ? { appServer: { url: process.env.ACCEPTANCE_APP_SERVER_URL, threadId: process.env.ACCEPTANCE_APP_SERVER_THREAD } } : {}),
+    });
+    await recipient.call('watch_topic', { topic_id: created.data.id });
+
     // A test-only Serve stand-in keeps the browser's actual same-origin behavior.
     // It is not a deployment component and does not prove tailnet policy.
     let proxyOrigin;
@@ -77,6 +84,31 @@ test('private Answer maps trusted owner and denies public or forged ingress', {
       assert.equal(answerResponse.code, 200);
       assert.equal(answerResponse.data.info.user_info.id, profile.data.id);
       await page.getByText(answerText, { exact: true }).first().waitFor();
+      const answerEvent = await recipient.event('answer.created', answerResponse.data.info.id);
+      assert.equal(answerEvent.topicId, created.data.id, 'owner answering own question still reaches watchers');
+      await page.reload({ waitUntil: 'networkidle' });
+      const acceptButton = page.getByText('Accept', { exact: true });
+      await acceptButton.waitFor({ state: 'visible', timeout: 5000 }).catch(async error => {
+        console.error('Resolution browser state:', (await page.locator('body').innerText()).slice(-6000));
+        throw error;
+      });
+      const accepted = page.waitForResponse(response => new URL(response.url()).pathname === '/answer/api/v1/answer/acceptance' && response.request().method() === 'POST');
+      await acceptButton.click();
+      assert.equal((await (await accepted).json()).code, 200, 'real browser accepts answer');
+      await page.getByText('Accepted', { exact: true }).first().waitFor();
+      const resolution = await recipient.event('topic.resolved', answerResponse.data.info.id);
+      assert.equal(resolution.topicId, created.data.id);
+      const resolved = await recipient.call('get_topic', { topic_id: created.data.id });
+      assert.equal(resolved.topic.accepted_answer_id, answerResponse.data.info.id, 'resolution is native accepted-answer state');
+      assert.equal(resolved.topic.is_followed, true, 'resolution does not unsubscribe');
+      await recipient.call('unwatch_topic', { topic_id: created.data.id });
+      const unfollowed = await recipient.call('get_topic', { topic_id: created.data.id });
+      assert.equal(unfollowed.topic.is_followed, false);
+      const afterUnwatch = await (await post('/answer/api/v1/comment', { ...owner, Origin: 'https://forum.example.ts.net' }, {
+        object_id: created.data.id, original_text: 'Activity after explicit resolution unwatch.',
+      })).json();
+      assert.equal(afterUnwatch.code, 200);
+
       const topicsResponse = await (await get('/answer/api/v1/question/page?page=1&page_size=20&order=newest', owner)).json();
       assert.equal(topicsResponse.code, 200);
       const agentTopics = topicsResponse.data.list.filter(topic => topic.title.startsWith('Agent '));
@@ -90,6 +122,11 @@ test('private Answer maps trusted owner and denies public or forged ingress', {
         visibleAuthors.add(detail.data.user_info.display_name.split('-')[0]);
       }
       assert.deepEqual([...visibleAuthors].sort(), ['alice', 'bob']);
+      await delay(250); // Bounded test synchronization with the asynchronous native queue.
+      const unread = await recipient.answer.call('notification/agent/page', { query: { after: '0', limit: 100 } });
+      assert.ok(unread.events.some(event => event.notificationId === resolution.notificationId), 'resolution remains unread for recovery');
+      assert.ok(!unread.events.some(event => event.objectId === afterUnwatch.data.comment_id), 'explicit unwatch stops subsequent watch activity');
+
       console.log(`Browser acceptance: ${browser.version()}, owner posted without forum login (simulated Serve headers).`);
     } finally {
       await browser.close();

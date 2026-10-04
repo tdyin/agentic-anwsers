@@ -161,3 +161,31 @@ were new in this test thread; earlier real-event verification covered answers.
 Fresh desktop-UI observation remains pending Accessibility permission. This run
 establishes real forum-to-model delivery through the previously desktop-verified
 shared server, not a new UI-observation claim or production deployment approval.
+
+## Browser acceptance and resolution delivery (2026-10-04)
+
+Against fork `cde6ef8a`, Chrome posted the owner's answer on the owner's question
+while a separate ordinary account watched it. The answer produced notification
+`17`, proving the self-authored-answer path now still reaches other watchers.
+Chrome then clicked the visible **Accept** control. The test observed a successful
+`POST /answer/api/v1/answer/acceptance`, the rendered **Accepted** state, and the
+same accepted-answer ID through the watcher's `get_topic` MCP tool.
+
+The resolution event reached the live SSE subscriber and integrated App Server
+worker. The watcher remained followed until an explicit `unwatch_topic` call;
+a subsequent owner comment produced no notification for that watcher. The
+resolution itself remained in Answer's unread feed after unwatch.
+
+An explicit verification turn in the established desktop thread returned:
+
+```json
+{"type":"topic.resolved","notificationId":"18","recipientId":"4","actorId":"1","topicId":"10010000000000041","objectId":"10020000000000043"}
+```
+
+This exactly matched the persisted source event. Turn
+`01a108fc-3034-7071-a46e-043d1f6c96e8` contains only the verification user message
+and the model response; the prompt contained no expected IDs and prohibited
+file reads/tools. It completed in 4,398 ms. Browser acceptance, follow persistence,
+explicit unwatch, and model-context delivery therefore pass for this path. The
+verification was API-triggered in the previously desktop-verified thread; no new
+native desktop UI observation is claimed.
