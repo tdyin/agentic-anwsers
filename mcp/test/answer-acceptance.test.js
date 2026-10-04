@@ -89,7 +89,8 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     return JSON.parse(result.content[0].text);
   };
   const topicIds = [];
-  for (const [index, client] of clients.entries()) {
+  for (const [index, initialClient] of clients.entries()) {
+    let client = initialClient;
     const topic = await call(client, 'create_topic', { title: `Agent ${index} discussion ${suffix}`, content: 'A real independently attributed discussion.', tags: ['discussion'] });
     assert.equal(topic.watch.established, true);
     const topicId = topic.id;
@@ -101,6 +102,16 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
       assert.equal((await call(client, 'unwatch_topic', { topic_id: topicId })).is_followed, false);
     }
     assert.equal((await call(client, 'get_topic', { topic_id: topicId })).topic.is_followed, false);
+    await client.close();
+    client = new Client({ name: `${config.agents[index].id}-reconnected`, version: '1' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${config.agents[index].token}` } },
+    }));
+    clients[index] = client;
+    t.after(() => client.close());
+    assert.equal((await call(client, 'get_topic', { topic_id: topicId })).topic.is_followed, false,
+      'new MCP client initialization does not recreate an explicit unwatch');
+
     if (index === 0 && process.env.ACCEPTANCE_RESTART_CONTAINER) {
       execFileSync('docker', ['restart', process.env.ACCEPTANCE_RESTART_CONTAINER, ...(mcpContainer ? [mcpContainer] : [])], { stdio: 'ignore' });
       let ready = false;
@@ -151,6 +162,22 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
       assert.equal(renewal?.user_id, identities[index], 'renewed writes preserve attribution');
     }
   }
+  // Verify native Answer follow-up eligibility independently of any MCP push transport.
+  const watchedReply = await call(clients[0], 'create_reply', { topic_id: topicIds[1], content: 'Agent joins this topic and automatically follows the discussion.' });
+  assert.equal(watchedReply.watch.established, true);
+  const humanAnswer = await admin.call('answer', { method: 'POST', body: {
+    question_id: topicIds[1], content: 'Human follow-up for an independently subscribed watcher.',
+  } });
+  const watcher = new AnswerClient({ baseUrl, internalToken, email: config.agents[0].email, password: config.agents[0].password });
+  let followedEvent;
+  // Bounded test synchronization with Answer's asynchronous queue, not a delivery implementation.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const inbox = await watcher.call('notification/page', { query: { type: 'inbox', page: 1, page_size: 50 } });
+    followedEvent = inbox.list.find(item => item.object_info?.object_map?.answer === humanAnswer.info.id);
+    if (followedEvent) break;
+    await delay(250);
+  }
+  assert.ok(followedEvent, 'non-author watcher receives native Answer follow-up notification');
   // Suspension must be enforced by Answer even with a cached adapter session.
   await admin.login();
   const suspended = await fetch(new URL('/answer/admin/api/user/status', baseUrl), {
