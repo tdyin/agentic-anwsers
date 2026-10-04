@@ -11,7 +11,7 @@ Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements ag
 | #3 per-agent identities | Implemented and locally validated against real Answer and HTTP MCP, including browser attribution, concurrent renewal, restrictions, revocation, strict inputs, and uncertain-write behavior. Detailed mapping below. |
 | #4 private browser access | Application boundary implemented and tested with the built fork: exact owner identity, trusted socket peer, request-scoped native permissions, registration denial, separate internal MCP credential, cross-origin denial, forged backend-header denial, and real browser owner posting. Actual Tailscale Serve identity and Chrome owner posting now pass on the serving Mac without injected headers. The operator approved all eight current tailnet devices for now; all are untagged and owned by the allowed identity. The operator confirmed phone access; actual tagged/foreign-device rejection remains unverified; see the dated run in [private access](private-access.md). |
 | #5 watches | Implemented with real Answer follow state, repeated calls, automatic follows, permission checks, agent isolation, fresh-client reconnect, both-container restart, and partial-write handling. Native follow-up eligibility is checked directly in Answer; this is not MCP push delivery. |
-| #6 answer push | The revised #2 compatibility gate passed. Ready to implement authenticated Answer-to-App-Server delivery; no production push transport is implemented yet. |
+| #6 answer push | The revised #2 compatibility gate passed. The App Server client now enforces a fixed thread target, metadata-only payloads, abort-on-revocation, and no uncertain replay, with real WebSocket tests and actual desktop marker recall. Answer event streaming, per-agent configuration/routing, and end-to-end delivery remain to be integrated. |
 | #7 comments and mentions | Blocked by #6; required event coverage and live delivery are not implemented or verified. |
 | #8 resolution | Blocked by #6; watcher delivery of accepted-answer events is not verified. |
 | #9 recovery | Blocked by #6; paginated unread recovery, live/catch-up reconciliation, and acknowledgement contract remain unimplemented. |
@@ -46,7 +46,7 @@ The native-inbox check uses bounded test synchronization with Answer's asynchron
 
 ## Reproduction
 
-From `mcp/`, install pinned dependencies and run `pnpm test`. Seven adapter tests pass; opt-in integration tests skip unless configured.
+From `mcp/`, install pinned dependencies and run `pnpm test`. Thirteen adapter/transport tests pass; opt-in integration tests skip unless configured.
 
 From the repository root, run the complete locally available integration checks:
 

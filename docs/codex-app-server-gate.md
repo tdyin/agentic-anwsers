@@ -73,3 +73,11 @@ These are individual local measurements, not percentiles or service-level guaran
 - Context insertion has no Answer read-state side effect and no inherent consumption acknowledgement. An agent must explicitly acknowledge notification IDs through its own Answer principal; reconnect catch-up remains Answer-owned and permission checked.
 - Do not use `turn/start`, `turn/steer`, or CLI queueing as implicit per-event wakeups. They have different semantics. The timing verifier used a deliberately operator-triggered turn solely to inspect context.
 - Retest credential revocation, wrong-thread rejection, disconnected catch-up, live/recovery overlap, and actual Answer events in #6–#10. The successful compatibility gate does not claim those features exist.
+
+## Delivery-client follow-up
+
+The reusable client in `mcp/src/app-server.js` was subsequently exercised against the same real App Server and desktop thread. The desktop recalled `54b04a37-323d-40d1-ae28-633764f2b14e` exactly on an explicit no-tools verification turn. The client itself calls no `turn/*` method.
+
+Six real-WebSocket transport tests cover fixed thread routing for two connections, Unix sockets and bearer handshake isolation, abort-on-revocation while another client continues, injection timeout without replay, wrong-thread/malformed-response denial, and invalid target/metadata rejection before connecting. The client copies only allowlisted event kinds and identifiers into context, not arbitrary forum strings. An in-flight revocation or transport failure can leave delivery uncertain; it cannot retract data already accepted by the remote server.
+
+This client is not yet wired to the MCP service lifecycle or Answer dispatch. A revocation signal works when supplied, but the remaining registry/event coordinator must supply it and reload credentials proactively. The test does not claim the full live forum path exists.
