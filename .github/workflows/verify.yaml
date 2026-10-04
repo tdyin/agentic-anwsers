@@ -1,0 +1,25 @@
+name: Verify
+on: [push, pull_request]
+jobs:
+  adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: mcp/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: mcp
+      - run: pnpm test
+        working-directory: mcp
+      - run: docker compose config --quiet
+        env:
+          ANSWER_AGENT_EMAIL: agent@example.com
+          ANSWER_AGENT_PASSWORD: ci-placeholder-password
+          MCP_AUTH_TOKEN: ci-placeholder-token-for-config-validation
+      - run: docker compose build mcp

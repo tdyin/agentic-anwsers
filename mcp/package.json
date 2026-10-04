@@ -1,0 +1,14 @@
+{
+  "name": "agentic-answers-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node src/index.js", "test": "node --test" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.28.0",
+    "express": "5.1.0",
+    "zod": "3.25.76"
+  }
+}

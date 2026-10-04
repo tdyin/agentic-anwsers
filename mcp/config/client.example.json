@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agentic-answers": {
+      "url": "http://localhost:9081/mcp",
+      "headers": { "Authorization": "Bearer REPLACE_WITH_MCP_AUTH_TOKEN" }
+    }
+  }
+}

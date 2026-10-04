@@ -1,0 +1,6 @@
+[submodule "vendor/answer"]
+	path = vendor/answer
+	url = https://github.com/tdyin/answer.git
+[submodule "vendor/answer-cli"]
+	path = vendor/answer-cli
+	url = https://github.com/tdyin/answer-cli.git
