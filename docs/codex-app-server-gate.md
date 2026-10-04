@@ -289,3 +289,43 @@ App Server environment. It waits for the actual `turn/completed` notification:
 an early paginated history response can transiently show an interrupted status
 while a newly started turn is still running, so history alone must not end the
 fixture. Default CI skips this real-model gate and cannot certify it.
+
+## Integrated worker overhead sample (2026-10-04)
+
+The container recovery fixture can measure the same production MCP process first
+with notification targets disabled, then with two targets enabled. Run:
+
+```sh
+ACCEPTANCE_MEASURE_OVERHEAD=1 \
+ACCEPTANCE_TEST_PATTERN='two notification workers' \
+ACCEPTANCE_MCP_IMAGE=agentic-acceptance-mcp ACCEPTANCE_PRIVATE=1 \
+node mcp/scripts/acceptance.js
+```
+
+One local Node 24/Colima sample produced:
+
+| Measurement | Workers disabled | Two workers enabled |
+| --- | ---: | ---: |
+| Observation window | 10,110 ms | 10,093 ms |
+| MCP process CPU time | 10 ms | 40 ms |
+| MCP process resident memory | 101,048 KiB | 104,776 KiB |
+| Container received + sent bytes | 202 | 396 |
+
+The observed memory difference was 3,728 KiB (3.64 MiB), and CPU time increased
+by 30 ms over roughly ten seconds (about 0.3% of one core). CPU comes from PID 1's
+user/system ticks in `/proc/1/stat`, converted using the container's `CLK_TCK`;
+RSS comes from `/proc/1/status`. Network counters include all container interfaces
+and the test-only loopback App Server observer. The observer is present in both
+windows. Answer state and stream traffic are real; no model turns occur here.
+
+Captured notification context text was 329 UTF-8 bytes for a single event and
+470 bytes for two events in one batch. These sizes include the untrusted-data
+preamble and event JSON, but exclude JSON-RPC/WebSocket/TLS framing. They are not
+token counts or a measurement of the model's future inference cost.
+
+This sequential single-run comparison includes allocation, JIT, and GC variation;
+10-second network windows can also sample different phases of the 20-second SSE
+heartbeat. It establishes a reproducible small-load observation, not a sustained
+load estimate, percentile, hard resource budget, or the desktop App Server's
+incremental resource use. The complete focused restart/revocation scenario also
+passed in this measurement run.

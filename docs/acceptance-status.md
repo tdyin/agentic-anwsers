@@ -91,7 +91,7 @@ The App Server observer is a test-only Node preload bound to container loopback,
 not a production component and not actual Codex context evidence. The production
 Dockerfile does not copy it. This closes the container lifecycle regression gap
 while leaving complete protected container-to-Mac desktop deployment unverified.
-The fixture tolerates only the observed transient ENOENT when checking an atomic
+An opt-in baseline/worker resource sample reports process CPU/RSS, container network traffic, and metadata payload sizes; see the App Server report. The fixture tolerates only the observed transient ENOENT when checking an atomic
 credential-file replacement through Colima; production continues to fail closed.
 
 ### Revocation synchronization correction

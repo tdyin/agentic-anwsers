@@ -24,6 +24,9 @@ test('two notification workers retain routing and unread state across both-conta
   const directory = process.env.ACCEPTANCE_WORK_DIR;
   const file = join(directory, 'container-notifications.json');
   const save = () => { writeFileSync(`${file}.next`, JSON.stringify(config), { mode: 0o600 }); renameSync(`${file}.next`, file); };
+  const measure = process.env.ACCEPTANCE_MEASURE_OVERHEAD === '1';
+  const targets = config.agents.map(agent => agent.appServer);
+  if (measure) for (const agent of config.agents) delete agent.appServer;
   save();
   copyFileSync(new URL('../scripts/acceptance-app-server.mjs', import.meta.url), join(directory, 'acceptance-app-server.mjs'));
   const name = `${process.env.ACCEPTANCE_RESTART_CONTAINER}-notifications`;
@@ -37,6 +40,34 @@ test('two notification workers retain routing and unread state across both-conta
   const logs = () => docker('logs', name).split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
   await until(() => logs().some(row => row.fixture === 'app-server-boot'), 'container starts');
   const firstBoot = logs().find(row => row.fixture === 'app-server-boot').boot;
+  if (measure) {
+    const ticksPerSecond = Number(docker('exec', name, 'getconf', 'CLK_TCK').trim());
+    assert.ok(ticksPerSecond > 0);
+    const sample = () => JSON.parse(docker('exec', name, 'node', '-e', `
+      const fs=require('fs');
+      const status=fs.readFileSync('/proc/1/status','utf8');
+      const stat=fs.readFileSync('/proc/1/stat','utf8');
+      const fields=stat.slice(stat.lastIndexOf(')')+2).trim().split(/\\s+/);
+      const cpuTicks=Number(fields[11])+Number(fields[12]);
+      const rows=fs.readFileSync('/proc/1/net/dev','utf8').trim().split('\\n').slice(2);
+      const network=rows.reduce((total,row)=>{const v=row.split(':')[1].trim().split(/\\s+/).map(Number); return total+v[0]+v[8]},0);
+      console.log(JSON.stringify({cpuTicks,rssKiB:Number(status.match(/VmRSS:\\s+(\\d+)/)[1]),networkBytes:network}));
+    `));
+    const window = async () => {
+      const start = sample(); const began = performance.now();
+      await delay(10000);
+      const end = sample();
+      return { elapsedMs: Math.round(performance.now() - began), cpuMs: (end.cpuTicks - start.cpuTicks) * 1000 / ticksPerSecond, rssKiB: end.rssKiB, networkBytes: end.networkBytes - start.networkBytes };
+    };
+    await delay(1000);
+    const baseline = await window();
+    config.agents.forEach((agent, i) => { agent.appServer = targets[i]; }); save();
+    await until(() => logs().filter(row => row.fixture === 'connected').length >= 4, 'both workers pass intentional initial reconnect');
+    await delay(2000);
+    const notifications = await window();
+    console.log(`Notification idle overhead sample: ${JSON.stringify({ principals: 2, baseline, notifications, rssDeltaKiB: notifications.rssKiB - baseline.rssKiB, scope: 'PID 1 CPU/RSS; container network including protocol fixture; single idle sample, not a service-level guarantee' })}`);
+  }
+
   const topics = [];
   for (let i = 0; i < principals.length; i++) {
     const topic = await alice.admin.call('question', { method: 'POST', body: { title: `Container recovery topic ${i}`, content: 'Persistent notification routing test.', tags: [{ slug_name: 'container-recovery' }] } });
@@ -83,4 +114,5 @@ test('two notification workers retain routing and unread state across both-conta
   await comment(0); await comment(1);
   await until(() => rows(secondBoot, config.agents[0].appServer.threadId).length === 3, 'other principal continues after revocation');
   assert.equal(rows(secondBoot, revokedThread).length, 1, `revoked live recipient gets no new injection: ${JSON.stringify(rows(secondBoot, revokedThread))}`);
+  if (measure) console.log(`Notification payload samples: ${JSON.stringify(logs().filter(row => row.fixture === 'injection').map(row => ({ events: row.events.length, bytes: row.payloadBytes })))}`);
 });

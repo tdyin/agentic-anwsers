@@ -28,7 +28,7 @@ server.on('connection', socket => {
       assert.equal(message.params.threadId, thread);
       const text = message.params.items[0].content[0].text;
       const { events } = JSON.parse(text.slice(text.indexOf('\n') + 1));
-      console.log(JSON.stringify({ fixture: 'injection', boot, thread, connection, events }));
+      console.log(JSON.stringify({ fixture: 'injection', boot, thread, connection, payloadBytes: Buffer.byteLength(text), events }));
     }
     socket.send(JSON.stringify({ id: message.id, result: message.method === 'thread/resume' ? { thread: { id: message.params.threadId } } : {} }));
   });
