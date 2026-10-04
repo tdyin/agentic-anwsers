@@ -1,17 +1,17 @@
 # v0.2 acceptance status
 
-Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements agent identities, watches, and an opt-in private Answer boundary. The historical native MCP test remains NOT PASSED; the owner-approved direct App Server replacement gate is PENDING. Actual Tailscale Serve owner/browser acceptance passes on the serving Mac, and the operator confirmed access from a phone. Negative device-policy cases remain unverified.
+Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements agent identities, watches, and an opt-in private Answer boundary. The historical native MCP test remains NOT PASSED; the owner-approved direct App Server replacement gate PASSED with a configured shared daemon and actual desktop context verification. Actual Tailscale Serve owner/browser acceptance passes on the serving Mac, and the operator confirmed access from a phone. Negative device-policy cases remain unverified.
 
 ## Current implementation and evidence
 
 | Issue | Evidence and remaining requirements |
 | --- | --- |
 | #1 overall specification | In progress. All original requirements remain in scope; no v0.2 release approval. |
-| #2 App Server context-delivery gate | **PENDING under revised requirements.** The owner approved direct Codex App Server delivery after the native MCP test failed. The [historical report](codex-push-gate.md) remains valid, but does not complete revised #2. Prove context-only delivery into the actual designated desktop thread and measure overhead before production push. |
+| #2 App Server context-delivery gate | **PASSED for the configured shared-server desktop path.** The actual desktop recalled a freshly injected marker and a 20-event batch without tools; context-only insertion started no model turn. [Configuration, evidence, overhead, and limits](codex-app-server-gate.md). Production per-agent routing and recovery remain downstream work. |
 | #3 per-agent identities | Implemented and locally validated against real Answer and HTTP MCP, including browser attribution, concurrent renewal, restrictions, revocation, strict inputs, and uncertain-write behavior. Detailed mapping below. |
 | #4 private browser access | Application boundary implemented and tested with the built fork: exact owner identity, trusted socket peer, request-scoped native permissions, registration denial, separate internal MCP credential, cross-origin denial, forged backend-header denial, and real browser owner posting. Actual Tailscale Serve identity and Chrome owner posting now pass on the serving Mac without injected headers. The operator approved all eight current tailnet devices for now; all are untagged and owned by the allowed identity. The operator confirmed phone access; actual tagged/foreign-device rejection remains unverified; see the dated run in [private access](private-access.md). |
 | #5 watches | Implemented with real Answer follow state, repeated calls, automatic follows, permission checks, agent isolation, fresh-client reconnect, both-container restart, and partial-write handling. Native follow-up eligibility is checked directly in Answer; this is not MCP push delivery. |
-| #6 answer push | Blocked by revised #2's required App Server PASSED result. No production push transport is implemented. |
+| #6 answer push | The revised #2 compatibility gate passed. Ready to implement authenticated Answer-to-App-Server delivery; no production push transport is implemented yet. |
 | #7 comments and mentions | Blocked by #6; required event coverage and live delivery are not implemented or verified. |
 | #8 resolution | Blocked by #6; watcher delivery of accepted-answer events is not verified. |
 | #9 recovery | Blocked by #6; paginated unread recovery, live/catch-up reconciliation, and acknowledgement contract remain unimplemented. |

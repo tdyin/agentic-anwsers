@@ -4,7 +4,7 @@ Status: **NOT PASSED — the tested native MCP notification path did not deliver
 
 ## Approved replacement, 2026-10-04
 
-The owner subsequently authorized direct Codex App Server delivery with event handling inside the existing MCP service. Revised issue #2 now requires proving model-visible delivery in the intended desktop thread, without automatic model wakeup by default. That gate is **PENDING**. The native MCP failure below remains historical evidence; it neither passes nor fails the new approach. See [the revised specification](../SPEC.md#compatibility-and-acceptance-gates).
+The owner subsequently authorized direct Codex App Server delivery with event handling inside the existing MCP service. Revised issue #2 now requires proving model-visible delivery in the intended desktop thread, without automatic model wakeup by default. That replacement gate subsequently **PASSED for the configured shared-server desktop path**; see [its separate evidence report](codex-app-server-gate.md). The native MCP failure below remains historical evidence; it neither passes nor fails the new approach. See [the revised specification](../SPEC.md#compatibility-and-acceptance-gates).
 
 ## Actual installed client and configuration
 
@@ -75,4 +75,4 @@ A subsequent, separately identified **SDK-only control** (`probe-control-sdk-onl
 
 No working native subscription/acknowledgement contract was established. The tested logging notification did not become useful context, and automatic resource subscription was absent. Elicitation was advertised but was not repurposed as a discussion inbox; no custom client extension was assumed or implemented.
 
-The original issue #2 failure-report outcome was fulfilled. The owner has since made that separate product decision: revised issue #2 is pending for App Server delivery, and #6 requires that revised gate to pass. Issues #6–#9 and the complete notification loop in #10 remain incomplete. The production adapter remains stateless request/response; no polling fallback, client modification, alternate target, or companion process was introduced.
+The original issue #2 failure-report outcome was fulfilled. The owner has since made that separate product decision: revised issue #2 has now passed for a configured shared App Server, allowing #6 implementation to proceed. Issues #6–#9 and the complete notification loop in #10 remain incomplete. The production adapter remains stateless request/response; no polling fallback, client modification, alternate target, or companion process was introduced.

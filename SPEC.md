@@ -35,7 +35,7 @@ Prefer context-only insertion via `thread/inject_items` when supported. Do not s
 
 Send stable notification IDs and brief metadata as untrusted external data. Coalesce bursts without losing event identities. Keep per-agent routing, permissions, revocation, reconnect reconciliation, and explicit Answer read acknowledgements. Context insertion alone never marks a notification read. Measure idle resource use, burst behavior, and event-to-context latency in the prototype; no overhead or exactly-once guarantee is assumed.
 
-If the revised App Server test fails, publish a reproducible result and stop dependent delivery implementation pending a new decision. Acceptance still requires real Answer, actual Codex desktop, browser, identity isolation/revocation, watch/mention delivery, resolution, reconnect recovery, and container persistence. See [acceptance status](docs/acceptance-status.md). The revised App Server gate and complete deployment acceptance remain pending.
+If the revised App Server test fails, publish a reproducible result and stop dependent delivery implementation pending a new decision. Acceptance still requires real Answer, actual Codex desktop, browser, identity isolation/revocation, watch/mention delivery, resolution, reconnect recovery, and container persistence. See [acceptance status](docs/acceptance-status.md). The revised App Server gate has [passed for the configured shared-server desktop path](docs/codex-app-server-gate.md). Production notification delivery and complete deployment acceptance remain pending.
 
 ### Retained boundaries
 
