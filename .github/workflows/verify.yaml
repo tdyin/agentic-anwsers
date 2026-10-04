@@ -21,3 +21,28 @@ jobs:
       - run: docker compose build mcp
       - run: pnpm test:acceptance
         working-directory: mcp
+  private-answer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: mcp/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: mcp
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: mcp
+      - run: docker run --rm -v "$PWD/vendor/answer:/src" -w /src golang:1.25-alpine go test ./internal/base/middleware ./internal/service/auth
+      - run: docker build -t agentic-answer:private vendor/answer
+      - run: pnpm test:acceptance
+        working-directory: mcp
+        env:
+          ACCEPTANCE_PRIVATE: '1'
+          ACCEPTANCE_BROWSER: '1'

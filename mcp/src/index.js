@@ -1,4 +1,5 @@
 import express from 'express';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { AgentRegistry } from './agents.js';
@@ -37,9 +38,10 @@ export function createApp({ agents, allowedHosts = ['localhost', '127.0.0.1'] })
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { ANSWER_BASE_URL = 'http://localhost:9080', MCP_AGENTS_FILE, MCP_ALLOWED_HOSTS = 'localhost,127.0.0.1' } = process.env;
+  const { ANSWER_BASE_URL = 'http://localhost:9080', MCP_AGENTS_FILE, ANSWER_INTERNAL_TOKEN_FILE, MCP_ALLOWED_HOSTS = 'localhost,127.0.0.1' } = process.env;
   if (!MCP_AGENTS_FILE) throw new Error('Set MCP_AGENTS_FILE to the operator-owned credential file.');
-  const agents = new AgentRegistry({ file: MCP_AGENTS_FILE, baseUrl: ANSWER_BASE_URL });
+  const internalToken = ANSWER_INTERNAL_TOKEN_FILE ? readFileSync(ANSWER_INTERNAL_TOKEN_FILE, 'utf8').trim() : undefined;
+  const agents = new AgentRegistry({ file: MCP_AGENTS_FILE, baseUrl: ANSWER_BASE_URL, internalToken });
   const listener = createApp({ agents, allowedHosts: MCP_ALLOWED_HOSTS.split(',').map(h => h.trim()) }).listen(3000, '0.0.0.0', () => console.log('Agentic Answers MCP listening on port 3000'));
   for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => listener.close(() => process.exit(0)));
 }

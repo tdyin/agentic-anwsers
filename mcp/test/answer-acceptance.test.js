@@ -14,25 +14,27 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   skip: !process.env.ACCEPTANCE_ANSWER_URL,
 }, async t => {
   const baseUrl = process.env.ACCEPTANCE_ANSWER_URL;
-  const admin = new AnswerClient({ baseUrl, email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD });
+  const internalToken = process.env.ACCEPTANCE_INTERNAL_TOKEN;
+  const internalHeaders = internalToken ? { 'X-Answer-Internal-Token': internalToken } : {};
+  const admin = new AnswerClient({ baseUrl, internalToken, email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD });
   await admin.login();
   const suffix = randomBytes(4).toString('hex');
   const config = { agents: ['alice', 'bob'].map(id => ({ id, email: `${id}-${suffix}@example.com`, password: randomBytes(12).toString('hex'), token: randomBytes(32).toString('hex') })) };
   const identities = [];
   for (const agent of config.agents) {
     const response = await fetch(new URL('/answer/admin/api/user', baseUrl), {
-      method: 'POST', headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+      method: 'POST', headers: { ...internalHeaders, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ display_name: `${agent.id}-${suffix}`, email: agent.email, password: agent.password }),
     });
     assert.equal((await response.json()).code, 200, 'admin user provisioning');
-    const principal = new AnswerClient({ baseUrl, email: agent.email, password: agent.password });
+    const principal = new AnswerClient({ baseUrl, internalToken, email: agent.email, password: agent.password });
     const info = await principal.request('user/login/email', { method: 'POST', body: { e_mail: agent.email, pass: agent.password } });
     assert.equal(info.role_id, 1, 'agent must not be administrator');
     identities.push(info.id);
   }
   assert.notEqual(identities[0], identities[1]);
   await admin.call('question', { method: 'POST', body: { title: `Acceptance seed ${suffix}`, content: 'Seed question for agent acceptance testing.', tags: [{ slug_name: 'discussion' }] } });
-  let agents = new AgentRegistry({ baseUrl, readConfig: () => config });
+  let agents = new AgentRegistry({ baseUrl, internalToken, readConfig: () => config });
   const app = createApp({ agents: { authenticate: header => agents.authenticate(header) } });
   const listener = await new Promise(resolve => { const server = app.listen(0, '127.0.0.1', () => resolve(server)); });
   t.after(() => new Promise(resolve => { listener.close(resolve); listener.closeAllConnections(); }));
@@ -70,7 +72,7 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
         await delay(500);
       }
       assert.ok(ready, 'Answer recovered after restart');
-      agents = new AgentRegistry({ baseUrl, readConfig: () => config });
+      agents = new AgentRegistry({ baseUrl, internalToken, readConfig: () => config });
       assert.equal((await call(client, 'get_topic', { topic_id: topicId })).topic.is_followed, false,
         'explicit unwatch survives Answer restart and a fresh adapter registry/session');
     }
@@ -92,7 +94,7 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   // Suspension must be enforced by Answer even with a cached adapter session.
   await admin.login();
   const suspended = await fetch(new URL('/answer/admin/api/user/status', baseUrl), {
-    method: 'PUT', headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+    method: 'PUT', headers: { ...internalHeaders, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: identities[0], status: 'suspended', suspend_duration: 'forever' }),
   });
   assert.equal((await suspended.json()).code, 200);

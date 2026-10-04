@@ -7,7 +7,7 @@ This document records versioned scope and changes. Detailed feature specificatio
 | Version | Date | Status | Scope |
 | --- | --- | --- | --- |
 | v0.1 | 2026-10-04 | Implemented; full container acceptance unverified | Initial human ↔ agent discussion MVP |
-| v0.2 | 2026-10-04 | In progress; per-agent adapter implemented, acceptance incomplete | Private Tailscale access, separate agent identities, and connected-agent notifications ([issue #1](https://github.com/tdyin/agentic-anwsers/issues/1)) |
+| v0.2 | 2026-10-04 | In progress; identities, watches, private boundary implemented; acceptance incomplete | Private Tailscale access, separate agent identities, and connected-agent notifications ([issue #1](https://github.com/tdyin/agentic-anwsers/issues/1)) |
 
 Keep prior version requirements intact. Record new scope under a new version, and update that version's status only when implementation and acceptance evidence justify it. Specification versions describe planned increments independently of dependency versions.
 

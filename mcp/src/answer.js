@@ -6,12 +6,13 @@ export class AnswerError extends Error {
 }
 
 export class AnswerClient {
-  constructor({ baseUrl, email, password, fetchImpl = fetch, assertActive = () => {} }) {
+  constructor({ baseUrl, email, password, fetchImpl = fetch, assertActive = () => {}, internalToken }) {
     this.baseUrl = baseUrl;
     this.email = email;
     this.password = password;
     this.fetch = fetchImpl;
     this.assertActive = assertActive;
+    this.internalToken = internalToken;
   }
 
   async request(path, { method = 'GET', query = {}, body, token } = {}) {
@@ -22,7 +23,7 @@ export class AnswerClient {
     try {
       response = await this.fetch(url, {
         method, redirect: 'error', signal: AbortSignal.timeout(15000),
-        headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { Accept: 'application/json', ...(this.internalToken ? { 'X-Answer-Internal-Token': this.internalToken } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
     } catch {

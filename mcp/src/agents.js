@@ -7,8 +7,9 @@ const digest = value => createHash('sha256').update(value).digest();
 // Configuration is operator-owned, never supplied through MCP. Re-read on each
 // request so atomic file replacement revokes credentials without a restart.
 export class AgentRegistry {
-  constructor({ file, baseUrl, readConfig = () => JSON.parse(readFileSync(file, 'utf8')) }) {
+  constructor({ file, baseUrl, internalToken, readConfig = () => JSON.parse(readFileSync(file, 'utf8')) }) {
     this.baseUrl = baseUrl;
+    this.internalToken = internalToken;
     this.readConfig = readConfig;
     this.entries = [];
     this.reload();
@@ -34,7 +35,7 @@ export class AgentRegistry {
         const revoked = new AbortController();
         return {
           id: config.id, signature, tokenHash: digest(`Bearer ${config.token}`), revoked,
-          answer: new AnswerClient({ baseUrl: this.baseUrl, email: config.email, password: config.password,
+          answer: new AnswerClient({ baseUrl: this.baseUrl, internalToken: this.internalToken, email: config.email, password: config.password,
             assertActive: () => { if (revoked.signal.aborted) throw new Error('Agent credential revoked.'); } }),
         };
       });

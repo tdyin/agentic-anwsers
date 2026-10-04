@@ -222,3 +222,15 @@ test('watch tools resolve visible topics and report partial writes without repla
   assert.match(data.watch.warning, /Do not repeat/);
   assert.equal(calls.filter(call => call.method === 'POST' && call.path.endsWith('/question')).length, 1);
 });
+
+test('internal ingress credential is sent only to Answer alongside the agent session', async () => {
+  const seen = [];
+  const client = new AnswerClient({ baseUrl: 'http://answer', internalToken: 'internal-test-secret', fetchImpl: async (url, options) => {
+    seen.push({ url: url.href, headers: options.headers });
+    return { ok: true, status: 200, json: async () => ({ code: 200, data: url.pathname.endsWith('/login/email') ? { access_token: 'agent-session' } : { id: '12' } }) };
+  } });
+  await client.call('question/info', { query: { id: '12' } });
+  assert.equal(seen.length, 2);
+  assert.ok(seen.every(call => call.headers['X-Answer-Internal-Token'] === 'internal-test-secret'));
+  assert.equal(seen[1].headers.Authorization, 'Bearer agent-session');
+});

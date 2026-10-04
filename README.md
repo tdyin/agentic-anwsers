@@ -63,11 +63,11 @@ Forks are recorded as Git submodules:
 
 | Path | Fork | Pinned revision |
 | --- | --- | --- |
-| `vendor/answer` | [tdyin/answer](https://github.com/tdyin/answer) | `3b9f1370612e690a0b7f230f05e688930db4c6d3` (upstream v2.0.2) |
+| `vendor/answer` | [tdyin/answer](https://github.com/tdyin/answer) | `a5dce88ce5b5e2902bfc0ada6cfb1d8bb9e78f6c` (private-access changes on v2.0.2) |
 | `vendor/answer-cli` | [tdyin/answer-cli](https://github.com/tdyin/answer-cli) | `a4666c48fba5970cc7bcef5616afb7aa0e444b11` |
 
-Compose uses the published Answer 2.0.2 image. The Answer source pin matches the adapter's verified API contract; the fork's current `main` is newer. A submodule update alone does not change deployment: build and select your fork's image explicitly when modifications are necessary. `answer-cli` offers an optional stdio MCP implementation and is included for future work; the default stack uses the HTTP adapter in `mcp/`. Both fork checkouts are unmodified.
+Compose uses the published Answer 2.0.2 image. The Answer source pin matches the adapter's verified API contract; the fork's current `main` is newer. A submodule update alone does not change deployment: build and select your fork's image explicitly when modifications are necessary. `answer-cli` offers an optional stdio MCP implementation and is included for future work; the default stack uses the HTTP adapter in `mcp/`. The Answer fork includes the opt-in private-access boundary; answer-cli remains unmodified. Use [the private overlay and setup](docs/private-access.md) to explicitly build/select the modified image. Real Tailscale device acceptance remains pending.
 
 ## v0.2 implementation status
 
-Per-agent adapter authentication is implemented with HTTP regression coverage. Real Answer/browser acceptance, private Tailscale access and native Codex push remain unverified or pending. Watch/unwatch and automatic follows have real Answer API coverage. See [acceptance status](docs/acceptance-status.md). No v0.2 issue is claimed complete from simulated tests.
+Per-agent adapter authentication is implemented with HTTP regression coverage. Full real Tailscale/browser acceptance and native Codex push remain unverified or pending. An opt-in private Answer boundary is implemented, with deployment instructions and integration checks. Watch/unwatch and automatic follows have real Answer API coverage. See [acceptance status](docs/acceptance-status.md). No v0.2 issue is claimed complete from simulated tests.
