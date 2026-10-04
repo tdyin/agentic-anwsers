@@ -11,10 +11,10 @@ Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements ag
 | #3 per-agent identities | Implemented and locally validated against real Answer and HTTP MCP, including browser attribution, concurrent renewal, restrictions, revocation, strict inputs, and uncertain-write behavior. Detailed mapping below. |
 | #4 private browser access | Application boundary implemented and tested with the built fork: exact owner identity, trusted socket peer, request-scoped native permissions, registration denial, separate internal MCP credential, cross-origin denial, forged backend-header denial, and real browser owner posting. Actual Tailscale Serve identity and Chrome owner posting now pass on the serving Mac without injected headers. The operator approved all eight current tailnet devices for now; all are untagged and owned by the allowed identity. The operator confirmed phone access; actual tagged/foreign-device rejection remains unverified; see the dated run in [private access](private-access.md). |
 | #5 watches | Implemented with real Answer follow state, repeated calls, automatic follows, permission checks, agent isolation, fresh-client reconnect, both-container restart, and partial-write handling. Native follow-up eligibility is checked directly in Answer; this is not MCP push delivery. |
-| #6 answer push | The revised #2 compatibility gate passed. The App Server client now enforces a fixed thread target, metadata-only payloads, abort-on-revocation, and no uncertain replay, with real WebSocket tests and actual desktop marker recall. Answer event streaming, per-agent configuration/routing, and end-to-end delivery remain to be integrated. |
+| #6 answer push | The revised #2 compatibility gate passed. The App Server client now enforces a fixed thread target, metadata-only payloads, abort-on-revocation, and no uncertain replay, with real WebSocket tests and actual desktop marker recall. Answer SSE, per-agent workers, operator-owned targets, permission checks, batching, and live revocation are implemented. A real Answer event passed through the worker and was recalled exactly in the previously desktop-verified thread via an explicit App Server verification turn. Fresh desktop-UI observation is pending macOS Accessibility access; two-agent complete desktop acceptance remains open. |
 | #7 comments and mentions | Blocked by #6; required event coverage and live delivery are not implemented or verified. |
 | #8 resolution | Blocked by #6; watcher delivery of accepted-answer events is not verified. |
-| #9 recovery | Blocked by #6; paginated unread recovery, live/catch-up reconciliation, and acknowledgement contract remain unimplemented. |
+| #9 recovery | Cursor-based unread recovery and live/catch-up reconciliation are implemented and tested against real SQLite and HTTP/SSE/WebSocket transports. Explicit acknowledgement tooling and full disconnected desktop/container acceptance remain outstanding. |
 | #10 complete deployment | Independent identity/watch/private-application loop is tested across both containers. The actual tailnet/browser/Codex notification loop, live revocation, disconnected recovery, and unread persistence remain incomplete. |
 
 ## Issue #3 acceptance mapping
@@ -26,7 +26,7 @@ Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements ag
 | Credential selects principal; no argument override | Strict tool schemas; HTTP SDK override-rejection regression. Separate user/password sessions selected solely by bearer mapping. |
 | Concurrent requests and session renewal | HTTP regression plus real concurrent comment writes after an Answer-only restart while both MCP sessions remain cached. Author IDs remain distinct. |
 | Permissions and restrictions; no admin substitution | Real provisioned accounts are asserted role 1; suspension blocks cached-session writes and follows while the other agent still posts. |
-| Revocation and lifecycle seam | Atomic credential-file replacement rejects the removed bearer while the other works. Removed registry entries abort their revocation signal. Future live transport still needs its own signal/reload integration. |
+| Revocation and lifecycle seam | Atomic credential-file replacement rejects the removed bearer while the other works. Removed registry entries abort their revocation signal. A one-second local credential-file supervisor now aborts live Answer/App Server access without requiring a new MCP request; HTTP/SSE/WebSocket regressions verify the other agent stays usable. |
 | Existing tools, validation, errors, no uncertain-write retry | Existing real-HTTP SDK mappings retained; invalid arguments, sanitized permission errors, and one-attempt network-failed writes are tested. |
 | SDK and real backend evidence | Both adapter regression and disposable Docker acceptance suites pass locally; CI runs both. |
 
@@ -46,7 +46,7 @@ The native-inbox check uses bounded test synchronization with Answer's asynchron
 
 ## Reproduction
 
-From `mcp/`, install pinned dependencies and run `pnpm test`. Thirteen adapter/transport tests pass; opt-in integration tests skip unless configured.
+From `mcp/`, install pinned dependencies and run `pnpm test`. Eighteen adapter/transport tests pass; opt-in integration tests skip unless configured.
 
 From the repository root, run the complete locally available integration checks:
 
@@ -67,11 +67,11 @@ For an already installed **disposable** Answer instance, supply `ACCEPTANCE_ANSW
 ## Versions and results
 
 - Answer contract baseline: `3b9f1370612e690a0b7f230f05e688930db4c6d3` / published 2.0.2.
-- Modified fork: `a5dce88ce5b5e2902bfc0ada6cfb1d8bb9e78f6c`, explicitly built as `agentic-answer:private`.
+- Modified fork: `bf4f4910`, explicitly built as `agentic-answer:private`.
 - Bundled plugins pinned to connector-basic 1.2.12, reviewer-basic 1.0.8, captcha-basic 1.0.6, and quick-links 1.0.3.
 - Docker 29.5.2; local Node 26.8.1; adapter image Node 24; MCP SDK 1.28.0; Go test image 1.25 Alpine; Playwright 1.63.0; local Chrome 154.0.8037.93.
 - Fork middleware and request-session lifecycle tests pass. Compose configuration validation and both images build successfully.
 - Local two-container/private/browser suite passes, including independent authors, owner posting without forum login, restart persistence, concurrent renewal, revocation, suspension, fresh client initialization, and native watcher notification eligibility.
 - [Push CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221924619) and [PR CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221926940) both passed on `05cbf8499631cf4cfbe330bee2b731f2031dec8b`, including both-container persistence and private browser acceptance.
 
-These results do not establish real tailnet approved-device enforcement, useful notification delivery to Codex desktop, comments/mentions/resolution push, live revocation, or unread recovery. Those requirements remain outstanding.
+The latest real two-container/private/browser suite also passes authenticated SSE receipt, cursor recovery without marking read, and suspension closing the stream. Worker transport tests pass isolation, overlap reconciliation, missed-event recovery, coalescing, permission filtering, and hot credential revocation. Full actual-desktop/tailnet deployment, negative device-policy cases, comments/mentions/resolution coverage, and explicit acknowledgement remain outstanding. See the dated real Answer context run in [the App Server report](codex-app-server-gate.md).

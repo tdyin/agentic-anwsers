@@ -57,6 +57,7 @@ export class AppServerClient {
     this.pending = new Map();
     this.sequence = 0;
     this.closed = false;
+    this.disconnected = new AbortController();
     this.delivering = false;
     this.onAbort = () => this.close();
     signal?.addEventListener('abort', this.onAbort, { once: true });
@@ -150,6 +151,7 @@ export class AppServerClient {
   close() {
     if (this.closed) return;
     this.closed = true;
+    this.disconnected.abort();
     this.signal?.removeEventListener('abort', this.onAbort);
     for (const request of this.pending.values()) {
       clearTimeout(request.timer);

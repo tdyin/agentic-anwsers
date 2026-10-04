@@ -39,5 +39,7 @@ an explicit call to Answer's existing acknowledgement API.
 
 Backend tests cover recipient isolation, overflow/cancellation, supported event
 metadata, real SQLite snapshot pagination, concurrent insert boundaries, and
-acknowledgement isolation. Full adapter coordination and desktop delivery from
-these endpoints remain separate acceptance requirements.
+acknowledgement isolation. The MCP service now coordinates this stream with unread recovery and fixed App
+Server targets; see [agent credentials](agent-credentials.md). Real Answer HTTP
+acceptance also verifies live receipt, unchanged unread state, and suspension
+closing the connection. Full actual-desktop deployment acceptance remains open.

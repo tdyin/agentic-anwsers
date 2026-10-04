@@ -15,14 +15,14 @@ export class AnswerClient {
     this.internalToken = internalToken;
   }
 
-  async request(path, { method = 'GET', query = {}, body, token } = {}) {
+  async request(path, { method = 'GET', query = {}, body, token, signal } = {}) {
     this.assertActive();
     const url = new URL(`/answer/api/v1/${path}`, this.baseUrl);
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value));
     let response;
     try {
       response = await this.fetch(url, {
-        method, redirect: 'error', signal: AbortSignal.timeout(15000),
+        method, redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(15000), ...(signal ? [signal] : [])]),
         headers: { Accept: 'application/json', ...(this.internalToken ? { 'X-Answer-Internal-Token': this.internalToken } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
@@ -42,6 +42,7 @@ export class AnswerClient {
       }).then(data => {
         if (!data?.access_token) throw new AnswerError(401, 'missing_access_token');
         this.token = data.access_token;
+        this.userId = data.id;
       }).finally(() => { this.loginPromise = undefined; });
     }
     await this.loginPromise;

@@ -11,6 +11,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { AnswerClient } from '../src/answer.js';
 import { AgentRegistry } from '../src/agents.js';
 import { createApp } from '../src/index.js';
+import { startNotifications } from '../src/notifications.js';
+import { AppServerClient } from '../src/app-server.js';
 
 // Run only against a disposable Answer instance: this provisions users and content.
 test('real Answer attributes MCP topic, answer and comment writes to distinct ordinary users', {
@@ -162,6 +164,19 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
       assert.equal(renewal?.user_id, identities[index], 'renewed writes preserve attribution');
     }
   }
+  const desktopDeliveries = [];
+  if (process.env.ACCEPTANCE_APP_SERVER_URL) {
+    assert.ok(!containerMode, 'desktop socket fixture runs inside the host MCP service');
+    config.agents[0].appServer = { url: process.env.ACCEPTANCE_APP_SERVER_URL, threadId: process.env.ACCEPTANCE_APP_SERVER_THREAD };
+    if (process.env.ACCEPTANCE_APP_SERVER_THREAD_B) config.agents[1].appServer = { url: process.env.ACCEPTANCE_APP_SERVER_URL, threadId: process.env.ACCEPTANCE_APP_SERVER_THREAD_B };
+    const stop = startNotifications(agents, { clientFactory: options => {
+      const client = new AppServerClient(options);
+      const deliver = client.deliver.bind(client);
+      client.deliver = async events => { await deliver(events); desktopDeliveries.push(...events); };
+      return client;
+    } });
+    t.after(stop);
+  }
   // Verify native Answer follow-up eligibility independently of any MCP push transport.
   const watchedReply = await call(clients[0], 'create_reply', { topic_id: topicIds[1], content: 'Agent joins this topic and automatically follows the discussion.' });
   assert.equal(watchedReply.watch.established, true);
@@ -228,6 +243,11 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     assert.ok(repeated.events.some(event => event.notificationId === followedEvent.id), 'delivery did not acknowledge event');
   }
 
+  if (process.env.ACCEPTANCE_APP_SERVER_URL) {
+    for (let attempt = 0; attempt < 100 && !desktopDeliveries.some(event => event.notificationId === followedEvent.id); attempt++) await delay(100);
+    assert.ok(desktopDeliveries.some(event => event.notificationId === followedEvent.id), 'real Answer event accepted by designated App Server thread');
+    console.log(`Desktop context verification required: ${JSON.stringify({ notificationId: followedEvent.id, recipientId: identities[0], topicId: topicIds[1], objectId: humanAnswer.info.id })}`);
+  }
   // Suspension must be enforced by Answer even with a cached adapter session.
   await admin.login();
   const suspended = await fetch(new URL('/answer/admin/api/user/status', baseUrl), {

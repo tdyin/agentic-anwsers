@@ -81,3 +81,50 @@ The reusable client in `mcp/src/app-server.js` was subsequently exercised agains
 Six real-WebSocket transport tests cover fixed thread routing for two connections, Unix sockets and bearer handshake isolation, abort-on-revocation while another client continues, injection timeout without replay, wrong-thread/malformed-response denial, and invalid target/metadata rejection before connecting. The client copies only allowlisted event kinds and identifiers into context, not arbitrary forum strings. An in-flight revocation or transport failure can leave delivery uncertain; it cannot retract data already accepted by the remote server.
 
 This client is not yet wired to the MCP service lifecycle or Answer dispatch. A revocation signal works when supplied, but the remaining registry/event coordinator must supply it and reload credentials proactively. The test does not claim the full live forum path exists.
+
+## Real Answer event through the integrated worker (2026-10-04)
+
+The optional desktop acceptance fixture ran the current notification worker in
+its host MCP service against a disposable private Answer image built from fork
+`bf4f4910`. It subscribed before catch-up, received a newly posted human answer
+for Alice's watched topic, checked topic access as Alice, and inserted metadata
+through the existing shared App Server socket. The fixture passed, including
+Answer stream suspension and private-boundary tests; it then removed its forum
+container, network, and credentials.
+
+Source notification metadata was `notificationId=5`, `recipientId=2`,
+`topicId=10010000000000025`, `objectId=10020000000000031`. An explicitly triggered
+verification turn in the designated existing desktop thread
+`01a108b3-eb21-7be2-9d2f-8c95f3f1face` returned exactly:
+
+```json
+{"notificationId":"5","recipientId":"2","topicId":"10010000000000025","objectId":"10020000000000031"}
+```
+
+The verification prompt supplied no expected IDs and prohibited tools/file reads.
+App Server's full turn record `01a108da-d97b-7a42-9984-3a55900d7566` contains only
+the verification user message and the model response, completed in 4,946 ms.
+This explicit test turn is not an automatic notification wakeup. Unlike the
+synthetic gate, the injected metadata originated in real Answer persistence and
+live dispatch through the integrated worker.
+
+macOS denied Accessibility automation again during this run, so verification was
+triggered and inspected through the protected App Server API in the same
+previously desktop-verified thread. A fresh desktop-UI observation of this real
+forum event remains pending; API success alone is not claimed as that UI check.
+Two-recipient isolation, visibility filtering, burst coalescing, missed-event
+recovery, and hot revocation pass real HTTP/SSE/WebSocket transport regressions;
+the complete two-agent actual-desktop deployment still requires acceptance.
+
+Reproduce the opt-in host-service fixture only against a designated test thread:
+
+```sh
+ACCEPTANCE_PRIVATE=1 \
+ACCEPTANCE_APP_SERVER_URL=unix:///absolute/path/to/app-server-control.sock \
+ACCEPTANCE_APP_SERVER_THREAD=existing-test-thread-uuid \
+node mcp/scripts/acceptance.js
+```
+
+The harness prints the source notification IDs for independent context
+verification. Omit `ACCEPTANCE_MCP_IMAGE` for this host-socket fixture. This run is
+not evidence that a macOS Unix socket is reachable from a Linux MCP container.
