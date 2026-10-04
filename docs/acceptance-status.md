@@ -26,7 +26,7 @@ The administrator credential is only used to provision ordinary users and a seed
 | --- | --- |
 | #1 overall specification | Partial progress only; v0.2 not accepted. |
 | #2 Codex native push gate | NOT PASSED. No Codex desktop bundle found in `/Applications`, `~/Applications`, or Spotlight query for `com.openai.codex`. A CLI executable exists, but it does not satisfy the desktop requirement. No controlled desktop notification test, negotiated capability capture, or useful context-delivery evidence exists. This observation does not prove that all clients lack support. |
-| #3 per-agent identities | Adapter and real Answer API attribution implemented/tested. Browser attribution, real account permission denial and suspension, and full deployment acceptance remain. Revocation signal is exposed for future live connections; live access is not implemented. |
+| #3 per-agent identities | Adapter and real Answer API attribution implemented/tested. Real Answer suspension denial is verified for content writes and follows with cached MCP sessions; the other agent continues. Browser attribution and full deployment acceptance remain. Revocation signal is exposed for future live connections; live access is not implemented. |
 | #4 private browser access | Tailscale mapping, private proxy boundary, device policy, signup removal, fork deployment, and real browser/device denial checks remain. |
 | #5 watches | Implemented watch/unwatch through Answer follow state with visibility checks and short-ID resolution; automatic follow after topic/answer creation; partial-write reporting. Real Answer tests pass for repeated operations, independent agents, and reads preserving unwatch. Restart verification is recorded below. Full client/container continuation and permission acceptance remain. |
 | #6 answer push | Blocked by #2's required PASSED gate, plus #3/#5 acceptance. No dependent push implementation started. |
@@ -44,3 +44,9 @@ The real Answer test now verifies automatic follows after topic and answer creat
 Set `ACCEPTANCE_RESTART_CONTAINER` to the name of the disposable Answer container to additionally restart it mid-test, reconstruct the adapter credential/session registry, and verify that an explicit unwatch persists. This option restarts the named container and must only name a test instance. It does not restart an MCP container or prove the complete browser/client notification loop.
 
 Restart result (2026-10-04): opt-in test passed with `ACCEPTANCE_RESTART_CONTAINER=agentic-issues-answer` (11.6 seconds). The same topic remained explicitly unwatched after Answer container restart and fresh adapter registry construction; subsequent answer creation restored the watch as specified.
+
+## Reproducible Docker acceptance
+
+Run `pnpm test:acceptance` from `mcp/` after installing dependencies. Docker must be available. The harness creates a uniquely named disposable Answer 2.0.2 container, random administrator credentials in a temporary file, and an anonymous SQLite volume. It waits for the application API, runs real HTTP MCP tests including Answer restart and account suspension, and removes only its own container, anonymous volume, and temporary credential file. Existing forum deployments are untouched. CI now runs this command after the adapter tests and image build.
+
+Local result on 2026-10-04: passed in 11.8 seconds of test execution. Suspension rejects writes and follows even with an already cached agent session; the independent agent still posts. The harness pins its selected host port because a dynamically assigned Docker port can change on container restart.

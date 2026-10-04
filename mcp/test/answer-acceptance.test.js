@@ -48,10 +48,12 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     assert.ok(!result.isError, JSON.stringify(result));
     return JSON.parse(result.content[0].text);
   };
+  const topicIds = [];
   for (const [index, client] of clients.entries()) {
     const topic = await call(client, 'create_topic', { title: `Agent ${index} discussion ${suffix}`, content: 'A real independently attributed discussion.', tags: ['discussion'] });
     assert.equal(topic.watch.established, true);
     const topicId = topic.id;
+    topicIds.push(topicId);
     assert.ok(topicId, 'question creation returns its ID');
     const read = await call(client, 'get_topic', { topic_id: topicId });
     assert.equal(read.topic.is_followed, true);
@@ -87,6 +89,18 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     const comments = await call(client, 'list_comments', { object_id: topicId });
     assert.ok(comments.list.some(item => item.user_id === identities[index]));
   }
+  // Suspension must be enforced by Answer even with a cached adapter session.
+  await admin.login();
+  const suspended = await fetch(new URL('/answer/admin/api/user/status', baseUrl), {
+    method: 'PUT', headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: identities[0], status: 'suspended', suspend_duration: 'forever' }),
+  });
+  assert.equal((await suspended.json()).code, 200);
+  const denied = await clients[0].callTool({ name: 'create_reply', arguments: { topic_id: topicIds[1], content: 'Suspended account must not publish this.' } });
+  assert.ok(denied.isError, 'Answer account suspension applies to cached MCP sessions');
+  const deniedWatch = await clients[0].callTool({ name: 'watch_topic', arguments: { topic_id: topicIds[1] } });
+  assert.ok(deniedWatch.isError, 'suspended users cannot establish follows');
+  await call(clients[1], 'add_comment', { object_id: topicIds[1], content: 'Other agent continues after suspension.' });
   config.agents.splice(0, 1);
   await assert.rejects(clients[0].listTools(), /Invalid MCP bearer token/);
   await clients[1].listTools();

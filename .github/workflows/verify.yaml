@@ -19,3 +19,5 @@ jobs:
         working-directory: mcp
       - run: docker compose config --quiet
       - run: docker compose build mcp
+      - run: pnpm test:acceptance
+        working-directory: mcp
