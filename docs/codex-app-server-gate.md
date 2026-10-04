@@ -329,3 +329,31 @@ heartbeat. It establishes a reproducible small-load observation, not a sustained
 load estimate, percentile, hard resource budget, or the desktop App Server's
 incremental resource use. The complete focused restart/revocation scenario also
 passed in this measurement run.
+
+## Approved model acknowledgement (2026-10-04)
+
+The owner explicitly approved acknowledging one notification in the disposable
+forum. The fixture applied a temporary per-tool `approval_mode = "approve"` only
+to `answer_acceptance.acknowledge_notification`, using the supported
+[per-tool MCP configuration](https://learn.chatgpt.com/docs/extend/mcp).
+It did not change global configuration or production credentials.
+
+Turn `01a10929-d8bd-7541-a7bf-a91481e329fa` in desktop-created thread
+`01a10805-851d-7193-88df-cd0475e4d684` successfully called `list_comments`, returned
+`comment-proof-e61ba74e-d02a-468d-9d92-166c4fe79909`, and called
+`acknowledge_notification` exactly once with notification ID `1`. The source
+comment ID was `10070000000000022`. The test checked the actual MCP call arguments,
+successful tool results, and absence of that event from Answer's unread feed.
+The focused real-model scenario passed in 12,670 ms. Other integration scenarios
+were excluded by the test-name pattern; this was not a new full-suite run.
+
+Cleanup restored the test thread without the temporary MCP configuration. A
+subsequent `mcpServerStatus/list` for `answer_acceptance` returned an empty list.
+The earlier approval denial is historical; model-driven read and explicit
+acknowledgement now pass with the owner's scoped approval. Fresh native desktop UI
+observation and protected container-to-desktop deployment remain separate gates.
+
+For an operator-approved repeat, add `ACCEPTANCE_ACK_APPROVED=1` to the opt-in
+real-model command above. This flag is an operator assertion of permission, not
+an automatic approval grant: use it only after explicit authorization for the
+one-notification disposable test. Without it, the fixture retains normal policy.

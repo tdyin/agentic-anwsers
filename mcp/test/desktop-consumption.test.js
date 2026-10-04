@@ -34,7 +34,8 @@ test('actual desktop thread consumes a pushed comment through MCP and explicitly
   await control.request('thread/unarchive', { threadId: target.threadId });
   // No user config file or global server is modified.
   await control.request('thread/resume', { threadId: target.threadId, approvalPolicy: 'never', config: {
-    'mcp_servers.answer_acceptance': { url: watcher.mcpUrl, http_headers: { Authorization: `Bearer ${watcher.credentials.token}` }, enabled_tools: ['list_comments', 'acknowledge_notification'] },
+    'mcp_servers.answer_acceptance': { url: watcher.mcpUrl, http_headers: { Authorization: `Bearer ${watcher.credentials.token}` }, enabled_tools: ['list_comments', 'acknowledge_notification'],
+      ...(process.env.ACCEPTANCE_ACK_APPROVED === '1' ? { tools: { acknowledge_notification: { approval_mode: 'approve' } } } : {}) },
   } });
   const inventory = await control.request('mcpServerStatus/list', { threadId: target.threadId, serverName: 'answer_acceptance' });
   assert.ok(inventory.data?.some(server => server.name === 'answer_acceptance' && Object.keys(server.tools || {}).length > 0), `test MCP tools available: ${JSON.stringify(inventory)}`);
@@ -54,6 +55,8 @@ test('actual desktop thread consumes a pushed comment through MCP and explicitly
   assert.ok(calls.some(item => item.tool === 'list_comments' && item.status === 'completed'), `model reads comment through MCP; item types: ${completed.items.map(i => i.type).join(',')}`);
   const acknowledgement = calls.find(item => item.tool === 'acknowledge_notification');
   assert.equal(acknowledgement?.status, 'completed', acknowledgement?.error?.message || 'model explicitly acknowledges through MCP');
+  assert.equal(calls.filter(item => item.tool === 'acknowledge_notification').length, 1, 'exactly one approved acknowledgement');
+  assert.deepEqual(acknowledgement.arguments, { notification_id: event.notificationId });
   assert.ok(completed.items.some(item => item.type === 'agentMessage' && item.text.includes(marker)), 'model recalls text available only through the tool');
   const unread = await watcher.answer.call('notification/agent/page', { query: { after: '0', limit: 100 } });
   assert.ok(!unread.events.some(row => row.notificationId === event.notificationId), 'native unread state consumed');
