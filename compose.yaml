@@ -15,10 +15,10 @@ services:
       - "127.0.0.1:${MCP_PORT:-9081}:3000"
     environment:
       ANSWER_BASE_URL: http://answer
-      ANSWER_AGENT_EMAIL: ${ANSWER_AGENT_EMAIL:?Set ANSWER_AGENT_EMAIL in .env}
-      ANSWER_AGENT_PASSWORD: ${ANSWER_AGENT_PASSWORD:?Set ANSWER_AGENT_PASSWORD in .env}
-      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?Set MCP_AUTH_TOKEN in .env}
+      MCP_AGENTS_FILE: /run/agentic-answers/agents.json
       MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost,127.0.0.1}
+    volumes:
+      - ./data/mcp:/run/agentic-answers:ro
     init: true
     read_only: true
     security_opt:

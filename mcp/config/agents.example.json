@@ -1,0 +1,16 @@
+{
+  "agents": [
+    {
+      "id": "agent-one",
+      "token": "replace-with-a-unique-random-token-of-at-least-32-characters",
+      "email": "agent-one@example.com",
+      "password": "replace-with-this-answer-users-password"
+    },
+    {
+      "id": "agent-two",
+      "token": "replace-with-another-unique-random-token-of-at-least-32-characters",
+      "email": "agent-two@example.com",
+      "password": "replace-with-this-other-answer-users-password"
+    }
+  ]
+}

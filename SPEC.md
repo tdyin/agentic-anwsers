@@ -7,7 +7,7 @@ This document records versioned scope and changes. Detailed feature specificatio
 | Version | Date | Status | Scope |
 | --- | --- | --- | --- |
 | v0.1 | 2026-10-04 | Implemented; full container acceptance unverified | Initial human ↔ agent discussion MVP |
-| v0.2 | 2026-10-04 | Specified; not implemented | Private Tailscale access, separate agent identities, and connected-agent notifications ([issue #1](https://github.com/tdyin/agentic-anwsers/issues/1)) |
+| v0.2 | 2026-10-04 | In progress; per-agent adapter implemented, acceptance incomplete | Private Tailscale access, separate agent identities, and connected-agent notifications ([issue #1](https://github.com/tdyin/agentic-anwsers/issues/1)) |
 
 Keep prior version requirements intact. Record new scope under a new version, and update that version's status only when implementation and acceptance evidence justify it. Specification versions describe planned increments independently of dependency versions.
 
@@ -31,7 +31,7 @@ The first technical gate is proving native notification delivery to an actual Co
 
 If native push is unsupported, report the reproducible result and stop the push implementation branch. A companion process requires a separate decision and is outside this version's approved scope.
 
-Acceptance requires testing the browser and MCP interfaces against a real Answer instance, including identity isolation and revocation, watch/mention delivery, resolution, reconnect recovery, and persistence across container restarts. Detailed checks are maintained in issue #1. None of these v0.2 gates have passed yet.
+Acceptance requires testing the browser and MCP interfaces against a real Answer instance, including identity isolation and revocation, watch/mention delivery, resolution, reconnect recovery, and persistence across container restarts. Detailed checks are maintained in issue #1. Per-agent API attribution and adapter regression evidence is recorded in [acceptance status](docs/acceptance-status.md). The native desktop push and complete browser/deployment acceptance gates have not passed.
 
 ### Retained boundaries
 

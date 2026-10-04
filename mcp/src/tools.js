@@ -9,7 +9,7 @@ export function createServer(answer) {
   const server = new McpServer({ name: 'agentic-answers', version: '0.1.0' });
   const register = (name, description, inputSchema, readOnly, handler) => {
     server.registerTool(name, {
-      description, inputSchema,
+      description, inputSchema: z.object(inputSchema).strict(),
       annotations: { readOnlyHint: readOnly, destructiveHint: false, idempotentHint: readOnly, openWorldHint: true },
     }, async args => {
       try {

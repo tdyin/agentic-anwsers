@@ -6,14 +6,16 @@ export class AnswerError extends Error {
 }
 
 export class AnswerClient {
-  constructor({ baseUrl, email, password, fetchImpl = fetch }) {
+  constructor({ baseUrl, email, password, fetchImpl = fetch, assertActive = () => {} }) {
     this.baseUrl = baseUrl;
     this.email = email;
     this.password = password;
     this.fetch = fetchImpl;
+    this.assertActive = assertActive;
   }
 
   async request(path, { method = 'GET', query = {}, body, token } = {}) {
+    this.assertActive();
     const url = new URL(`/answer/api/v1/${path}`, this.baseUrl);
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value));
     let response;

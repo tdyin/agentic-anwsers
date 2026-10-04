@@ -18,8 +18,4 @@ jobs:
       - run: pnpm test
         working-directory: mcp
       - run: docker compose config --quiet
-        env:
-          ANSWER_AGENT_EMAIL: agent@example.com
-          ANSWER_AGENT_PASSWORD: ci-placeholder-password
-          MCP_AUTH_TOKEN: ci-placeholder-token-for-config-validation
       - run: docker compose build mcp

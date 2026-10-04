@@ -5,6 +5,7 @@ import { request } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { AnswerClient } from '../src/answer.js';
+import { AgentRegistry } from '../src/agents.js';
 import { createApp } from '../src/index.js';
 
 const secret = 'integration-test-token-with-at-least-32-characters';
@@ -36,8 +37,8 @@ test('SDK client completes authenticated tool calls against Answer HTTP contract
     res.json({ code: 200, data: { path: req.path, list: [{ id: '9007199254740993', content: 'human response' }] } });
   });
   const baseUrl = await listen(backend, t);
-  const answer = new AnswerClient({ baseUrl, email: 'agent@example.com', password: 'example-password' });
-  const mcpUrl = await listen(createApp({ answer, authToken: secret }), t);
+  const agents = new AgentRegistry({ baseUrl, readConfig: () => ({ agents: [{ id: 'agent', token: secret, email: 'agent@example.com', password: 'example-password' }] }) });
+  const mcpUrl = await listen(createApp({ agents }), t);
   assert.equal((await fetch(`${mcpUrl}/mcp`, { method: 'POST', body: '{}' })).status, 401);
   assert.equal((await fetch(`${mcpUrl}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, Origin: 'http://evil.example' } })).status, 403);
   const badHostStatus = await new Promise((resolve, reject) => {
@@ -96,5 +97,83 @@ test('network failure on a write is never retried', async () => {
 });
 
 test('placeholder MCP credentials fail closed', () => {
-  assert.throws(() => createApp({ answer: {}, authToken: 'replace-with-a-long-random-token' }), /MCP_AUTH_TOKEN/);
+  assert.throws(() => new AgentRegistry({ readConfig: () => ({ agents: [{ id: 'agent', token: 'replace-with-a-long-random-token', email: 'a@example.com', password: 'password' }] }) }), /Invalid agent/);
+});
+
+
+test('independent agents retain attribution through concurrent renewal and hot revocation', async t => {
+  const logins = { alice: 0, bob: 0 };
+  const writes = [];
+  let expire = false;
+  const backend = express();
+  backend.use(express.json());
+  backend.use((req, res) => {
+    if (req.path.endsWith('/user/login/email')) {
+      const name = req.body.e_mail.split('@')[0];
+      assert.equal(req.body.pass, `${name}-password`);
+      logins[name]++;
+      return res.json({ code: 200, data: { access_token: `${name}-${logins[name]}` } });
+    }
+    const session = req.headers.authorization.slice(7);
+    const name = session.split('-')[0];
+    if (expire && session.endsWith('-1')) return res.status(401).json({ code: 401 });
+    if (req.body?.content === 'denied content') return res.status(403).json({ code: 403, reason: 'Forbidden' });
+    writes.push({ name, body: req.body });
+    res.json({ code: 200, data: { author: name } });
+  });
+  const baseUrl = await listen(backend, t);
+  let config = { agents: ['alice', 'bob'].map(id => ({ id, email: `${id}@example.com`, password: `${id}-password`, token: `${secret}-${id}` })) };
+  const agents = new AgentRegistry({ baseUrl, readConfig: () => config });
+  const mcpUrl = await listen(createApp({ agents }), t);
+  const clients = await Promise.all(config.agents.map(async agent => {
+    const client = new Client({ name: agent.id, version: '1' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${agent.token}` } } }));
+    t.after(() => client.close());
+    return client;
+  }));
+  const reply = client => client.callTool({ name: 'create_reply', arguments: { topic_id: '12', content: 'Valid content' } });
+  for (let round = 0; round < 2; round++) {
+    const results = await Promise.all(clients.flatMap(client => [reply(client), reply(client)]));
+    assert.deepEqual(results.map(result => JSON.parse(result.content[0].text).author), ['alice', 'alice', 'bob', 'bob']);
+    expire = true;
+  }
+  assert.deepEqual(logins, { alice: 2, bob: 2 });
+  const before = writes.length;
+  const spoof = await clients[0].callTool({ name: 'create_reply', arguments: { topic_id: '12', content: 'Valid content', user_id: 'bob' } });
+  assert.ok(spoof.isError);
+  assert.equal(writes.length, before);
+  const denied = await clients[0].callTool({ name: 'create_reply', arguments: { topic_id: '12', content: 'denied content' } });
+  assert.ok(denied.isError);
+  assert.deepEqual(logins, { alice: 2, bob: 2 });
+  const alice = agents.authenticate(`Bearer ${secret}-alice`);
+  config = { agents: [config.agents[1]] };
+  await assert.rejects(reply(clients[0]), /Invalid MCP bearer token/);
+  assert.equal(alice.revoked.signal.aborted, true);
+  await assert.rejects(alice.answer.call('question/info'), /revoked/);
+  assert.equal(JSON.parse((await reply(clients[1])).content[0].text).author, 'bob');
+  assert.equal(logins.bob, 2, 'unrelated agent keeps its session');
+  config = { agents: [{ id: 'broken' }] };
+  await assert.rejects(reply(clients[1]), /authentication unavailable/);
+});
+
+test('atomic credential file replacement revokes old tokens and rejects corrupt files', async t => {
+  const { mkdtempSync, writeFileSync, renameSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-credentials-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, 'agents.json');
+  const config = { agents: [{ id: 'alice', email: 'alice@example.com', password: 'test-password', token: secret }] };
+  writeFileSync(file, JSON.stringify(config), { mode: 0o600 });
+  const agents = new AgentRegistry({ file });
+  const old = agents.authenticate(`Bearer ${secret}`);
+  config.agents[0].token = `${secret}-rotated`;
+  writeFileSync(`${file}.next`, JSON.stringify(config), { mode: 0o600 });
+  renameSync(`${file}.next`, file);
+  assert.equal(agents.authenticate(`Bearer ${secret}`), undefined);
+  assert.ok(old.revoked.signal.aborted);
+  assert.equal(agents.authenticate(`Bearer ${secret}-rotated`).id, 'alice');
+  writeFileSync(file, '{');
+  assert.throws(() => agents.authenticate(`Bearer ${secret}-rotated`), /Invalid agent/);
+  assert.equal(agents.entries.length, 0);
 });
