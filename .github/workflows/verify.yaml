@@ -18,9 +18,11 @@ jobs:
       - run: pnpm test
         working-directory: mcp
       - run: docker compose config --quiet
-      - run: docker compose build mcp
+      - run: docker build -t agentic-acceptance-mcp mcp
       - run: pnpm test:acceptance
         working-directory: mcp
+        env:
+          ACCEPTANCE_MCP_IMAGE: agentic-acceptance-mcp
   private-answer:
     runs-on: ubuntu-latest
     steps:
@@ -41,8 +43,10 @@ jobs:
         working-directory: mcp
       - run: docker run --rm -v "$PWD/vendor/answer:/src" -w /src golang:1.25-alpine go test ./internal/base/middleware ./internal/service/auth
       - run: docker build -t agentic-answer:private vendor/answer
+      - run: docker build -t agentic-acceptance-mcp mcp
       - run: pnpm test:acceptance
         working-directory: mcp
         env:
+          ACCEPTANCE_MCP_IMAGE: agentic-acceptance-mcp
           ACCEPTANCE_PRIVATE: '1'
           ACCEPTANCE_BROWSER: '1'

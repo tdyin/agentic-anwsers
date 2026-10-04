@@ -6,7 +6,7 @@ import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
-// Own only the randomly named test container and its anonymous SQLite volume.
+// Own only this randomly named test deployment, network, and anonymous SQLite volume.
 const name = `agentic-acceptance-${randomBytes(6).toString('hex')}`;
 const scratch = fileURLToPath(new URL('../../data/acceptance/', import.meta.url));
 mkdirSync(scratch, { recursive: true });
@@ -29,15 +29,19 @@ await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
 const hostPort = reservation.address().port;
 await new Promise(resolve => reservation.close(resolve));
 let created = false;
+let networkCreated = false;
+const network = `${name}-net`;
 try {
+  execFileSync('docker', ['network', 'create', network], { stdio: 'pipe' });
+  networkCreated = true;
   const privateArgs = privateMode ? [
     '-v', `${directory}:/run/acceptance:ro`,
     '-e', 'ANSWER_TAILSCALE_OWNER=owner@example.com', '-e', 'ANSWER_OWNER_EMAIL=owner@example.com',
-    '-e', `ANSWER_TRUSTED_PROXY_CIDR=${execFileSync('docker', ['network', 'inspect', 'bridge', '--format', '{{(index .IPAM.Config 0).Gateway}}'], { encoding: 'utf8' }).trim()}/32`,
+    '-e', `ANSWER_TRUSTED_PROXY_CIDR=${execFileSync('docker', ['network', 'inspect', network, '--format', '{{(index .IPAM.Config 0).Gateway}}'], { encoding: 'utf8' }).trim()}/32`,
     '-e', 'ANSWER_PRIVATE_ORIGIN=https://forum.example.ts.net',
     '-e', 'ANSWER_INTERNAL_TOKEN_FILE=/run/acceptance/internal-token',
   ] : [];
-  execFileSync('docker', ['run', '-d', '--name', name, '-p', `127.0.0.1:${hostPort}:80`,
+  execFileSync('docker', ['run', '-d', '--name', name, '--network', network, '--network-alias', 'answer', '-p', `127.0.0.1:${hostPort}:80`,
     '--env-file', envFile, ...privateArgs, privateMode ? 'agentic-answer:private' : 'apache/answer:2.0.2'], { stdio: 'pipe' });
   created = true;
   const port = execFileSync('docker', ['inspect', '--format', '{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}', name], { encoding: 'utf8' }).trim();
@@ -55,12 +59,13 @@ try {
   if (!ready) throw new Error('Disposable Answer instance did not become ready.');
   const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', 'test/answer-acceptance.test.js', ...(privateMode ? ['test/private-acceptance.test.js'] : [])], {
     cwd: new URL('..', import.meta.url), stdio: 'inherit',
-    env: { ...process.env, ACCEPTANCE_ANSWER_URL: baseUrl, ACCEPTANCE_RESTART_CONTAINER: name,
+    env: { ...process.env, ACCEPTANCE_ANSWER_URL: baseUrl, ACCEPTANCE_RESTART_CONTAINER: name, ACCEPTANCE_NETWORK: network, ACCEPTANCE_WORK_DIR: directory,
       ADMIN_EMAIL: 'owner@example.com', ADMIN_PASSWORD: adminPassword, ACCEPTANCE_INTERNAL_TOKEN: internalToken },
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 } finally {
   if (created) execFileSync('docker', ['rm', '-f', '-v', name], { stdio: 'pipe' });
+  if (networkCreated) execFileSync('docker', ['network', 'rm', network], { stdio: 'pipe' });
   rmSync(directory, { recursive: true, force: true });
 }

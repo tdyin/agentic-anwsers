@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { writeFileSync, renameSync } from 'node:fs';
+import { join } from 'node:path';
+import { createServer as createSocket } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -35,13 +38,48 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   assert.notEqual(identities[0], identities[1]);
   await admin.call('question', { method: 'POST', body: { title: `Acceptance seed ${suffix}`, content: 'Seed question for agent acceptance testing.', tags: [{ slug_name: 'discussion' }] } });
   let agents = new AgentRegistry({ baseUrl, internalToken, readConfig: () => config });
-  const app = createApp({ agents: { authenticate: header => agents.authenticate(header) } });
-  const listener = await new Promise(resolve => { const server = app.listen(0, '127.0.0.1', () => resolve(server)); });
-  t.after(() => new Promise(resolve => { listener.close(resolve); listener.closeAllConnections(); }));
+  const containerMode = Boolean(process.env.ACCEPTANCE_MCP_IMAGE);
+  let mcpUrl;
+  let mcpContainer;
+  const saveConfig = () => {
+    if (!containerMode) return;
+    const file = join(process.env.ACCEPTANCE_WORK_DIR, 'agents.json');
+    writeFileSync(`${file}.next`, JSON.stringify(config), { mode: 0o600 });
+    renameSync(`${file}.next`, file);
+  };
+  if (containerMode) {
+    saveConfig();
+    const socket = createSocket();
+    await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
+    const port = socket.address().port;
+    await new Promise(resolve => socket.close(resolve));
+    mcpContainer = `${process.env.ACCEPTANCE_RESTART_CONTAINER}-mcp`;
+    // Match host ownership of the private fixture files, retaining non-root execution.
+    const privateArgs = internalToken ? ['-e', 'ANSWER_INTERNAL_TOKEN_FILE=/run/acceptance/internal-token'] : [];
+    execFileSync('docker', ['run', '-d', '--name', mcpContainer, '--network', process.env.ACCEPTANCE_NETWORK,
+      '--user', `${process.getuid()}:${process.getgid()}`, '--read-only', '--cap-drop=ALL',
+      '-p', `127.0.0.1:${port}:3000`, '-v', `${process.env.ACCEPTANCE_WORK_DIR}:/run/acceptance:ro`,
+      '-e', 'ANSWER_BASE_URL=http://answer', '-e', 'MCP_AGENTS_FILE=/run/acceptance/agents.json',
+      ...privateArgs, process.env.ACCEPTANCE_MCP_IMAGE], { stdio: 'pipe' });
+    t.after(() => execFileSync('docker', ['rm', '-f', '-v', mcpContainer], { stdio: 'pipe' }));
+    mcpUrl = `http://127.0.0.1:${port}`;
+    let ready = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      try { ready = (await fetch(`${mcpUrl}/healthz`, { signal: AbortSignal.timeout(1000) })).ok; } catch {}
+      if (ready) break;
+      await delay(250);
+    }
+    assert.ok(ready, 'MCP container ready');
+  } else {
+    const app = createApp({ agents: { authenticate: header => agents.authenticate(header) } });
+    const listener = await new Promise(resolve => { const server = app.listen(0, '127.0.0.1', () => resolve(server)); });
+    t.after(() => new Promise(resolve => { listener.close(resolve); listener.closeAllConnections(); }));
+    mcpUrl = `http://127.0.0.1:${listener.address().port}`;
+  }
   const clients = [];
   for (const agent of config.agents) {
     const client = new Client({ name: agent.id, version: '1' });
-    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${listener.address().port}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${agent.token}` } } }));
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${agent.token}` } } }));
     clients.push(client);
     t.after(() => client.close());
   }
@@ -64,10 +102,13 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     }
     assert.equal((await call(client, 'get_topic', { topic_id: topicId })).topic.is_followed, false);
     if (index === 0 && process.env.ACCEPTANCE_RESTART_CONTAINER) {
-      execFileSync('docker', ['restart', process.env.ACCEPTANCE_RESTART_CONTAINER], { stdio: 'ignore' });
+      execFileSync('docker', ['restart', process.env.ACCEPTANCE_RESTART_CONTAINER, ...(mcpContainer ? [mcpContainer] : [])], { stdio: 'ignore' });
       let ready = false;
       for (let attempt = 0; attempt < 30; attempt++) {
-        try { ready = (await fetch(new URL('/healthz', baseUrl), { signal: AbortSignal.timeout(1000) })).ok; } catch {}
+        try {
+          ready = (await fetch(new URL('/healthz', baseUrl), { signal: AbortSignal.timeout(1000) })).ok;
+          if (mcpContainer) ready = ready && (await fetch(`${mcpUrl}/healthz`, { signal: AbortSignal.timeout(1000) })).ok;
+        } catch { ready = false; }
         if (ready) break;
         await delay(500);
       }
@@ -91,6 +132,25 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     const comments = await call(client, 'list_comments', { object_id: topicId });
     assert.ok(comments.list.some(item => item.user_id === identities[index]));
   }
+  if (process.env.ACCEPTANCE_RESTART_CONTAINER) {
+    // Keep MCP sessions cached while Answer loses its in-memory sessions.
+    execFileSync('docker', ['restart', process.env.ACCEPTANCE_RESTART_CONTAINER], { stdio: 'ignore' });
+    let ready = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      try { ready = (await fetch(new URL('/healthz', baseUrl), { signal: AbortSignal.timeout(1000) })).ok; } catch {}
+      if (ready) break;
+      await delay(250);
+    }
+    assert.ok(ready, 'Answer recovered for concurrent renewal');
+    await Promise.all(clients.map((client, index) => call(client, 'add_comment', {
+      object_id: topicIds[index], content: `Concurrent renewed session for agent ${index}.`,
+    })));
+    for (const [index, client] of clients.entries()) {
+      const comments = await call(client, 'list_comments', { object_id: topicIds[index] });
+      const renewal = comments.list.find(comment => comment.original_text === `Concurrent renewed session for agent ${index}.`);
+      assert.equal(renewal?.user_id, identities[index], 'renewed writes preserve attribution');
+    }
+  }
   // Suspension must be enforced by Answer even with a cached adapter session.
   await admin.login();
   const suspended = await fetch(new URL('/answer/admin/api/user/status', baseUrl), {
@@ -104,6 +164,23 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   assert.ok(deniedWatch.isError, 'suspended users cannot establish follows');
   await call(clients[1], 'add_comment', { object_id: topicIds[1], content: 'Other agent continues after suspension.' });
   config.agents.splice(0, 1);
+  saveConfig();
+  if (mcpContainer) {
+    // Desktop VM bind mounts can briefly return ENOENT after host rename.
+    // Wait for publication in the container before testing the new snapshot.
+    let published = false;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        const ids = execFileSync('docker', ['exec', mcpContainer, 'node', '-e',
+          "const fs=require('fs'); console.log(JSON.stringify(JSON.parse(fs.readFileSync('/run/acceptance/agents.json','utf8')).agents.map(a=>a.id)))"],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        published = ids.trim() === JSON.stringify(config.agents.map(agent => agent.id));
+      } catch {}
+      if (published) break;
+      await delay(250);
+    }
+    assert.ok(published, 'replacement credential file visible inside MCP container');
+  }
   await assert.rejects(clients[0].listTools(), /Invalid MCP bearer token/);
   await clients[1].listTools();
 });

@@ -77,6 +77,19 @@ test('private Answer maps trusted owner and denies public or forged ingress', {
       assert.equal(answerResponse.code, 200);
       assert.equal(answerResponse.data.info.user_info.id, profile.data.id);
       await page.getByText(answerText, { exact: true }).first().waitFor();
+      const topicsResponse = await (await get('/answer/api/v1/question/page?page=1&page_size=20&order=newest', owner)).json();
+      assert.equal(topicsResponse.code, 200);
+      const agentTopics = topicsResponse.data.list.filter(topic => topic.title.startsWith('Agent '));
+      assert.equal(agentTopics.length, 2, 'both agent topics exist in the fresh fixture');
+      const visibleAuthors = new Set();
+      for (const topic of agentTopics) {
+        await page.goto(`${proxyOrigin}/questions/${topic.id}`, { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: topic.title, exact: true }).waitFor();
+        const detail = await (await get(`/answer/api/v1/question/info?id=${topic.id}`, owner)).json();
+        await page.getByText(detail.data.user_info.display_name, { exact: true }).first().waitFor();
+        visibleAuthors.add(detail.data.user_info.display_name.split('-')[0]);
+      }
+      assert.deepEqual([...visibleAuthors].sort(), ['alice', 'bob']);
       console.log(`Browser acceptance: ${browser.version()}, owner posted without forum login (simulated Serve headers).`);
     } finally {
       await browser.close();

@@ -25,10 +25,10 @@ The administrator credential is only used to provision ordinary users and a seed
 | Issue | Current evidence and remaining work |
 | --- | --- |
 | #1 overall specification | Partial progress only; v0.2 not accepted. |
-| #2 Codex native push gate | NOT PASSED. No Codex desktop bundle found in `/Applications`, `~/Applications`, or Spotlight query for `com.openai.codex`. A CLI executable exists, but it does not satisfy the desktop requirement. No controlled desktop notification test, negotiated capability capture, or useful context-delivery evidence exists. This observation does not prove that all clients lack support. |
-| #3 per-agent identities | Adapter and real Answer API attribution implemented/tested. Real Answer suspension denial is verified for content writes and follows with cached MCP sessions; the other agent continues. Browser attribution and full deployment acceptance remain. Revocation signal is exposed for future live connections; live access is not implemented. |
+| #2 Codex native push gate | NOT PASSED. No Codex desktop bundle found in `/Applications`, `~/Applications`, or Spotlight query for `com.openai.codex`. A CLI executable exists, but it does not satisfy the desktop requirement. No controlled desktop notification test, negotiated capability capture, or useful context-delivery evidence exists. See [the reproducible availability failure report](codex-push-gate.md). This observation does not prove that all clients lack support. |
+| #3 per-agent identities | Adapter and real Answer API attribution implemented/tested. Real Answer suspension denial is verified for content writes and follows with cached MCP sessions; the other agent continues. Browser attribution for both agents and real concurrent session renewal now pass. Full notification/deployment acceptance remains. Revocation signal is exposed for future live connections; live access is not implemented. |
 | #4 private browser access | Opt-in Answer owner mapping, socket-peer validation, internal MCP credential boundary, registration denial, and explicit fork image overlay implemented. Go boundary checks and real private Answer API tests pass. Actual Serve identity/device-policy acceptance remains outstanding. Browser owner posting passes through the test-only proxy described below. |
-| #5 watches | Implemented watch/unwatch through Answer follow state with visibility checks and short-ID resolution; automatic follow after topic/answer creation; partial-write reporting. Real Answer tests pass for repeated operations, independent agents, and reads preserving unwatch. Restart verification is recorded below. Full client/container continuation and permission acceptance remain. |
+| #5 watches | Implemented watch/unwatch through Answer follow state with visibility checks and short-ID resolution; automatic follow after topic/answer creation; partial-write reporting. Real Answer tests pass for repeated operations, independent agents, and reads preserving unwatch. Restart verification is recorded below. Two-container restart continuation, real suspension denial, and browser attribution now pass. Native notification eligibility/delivery remains gated separately. |
 | #6 answer push | Blocked by #2's required PASSED gate, plus #3/#5 acceptance. No dependent push implementation started. |
 | #7 comments and mentions | Blocked by #6. |
 | #8 resolution | Blocked by #6. |
@@ -56,3 +56,20 @@ Local result on 2026-10-04: passed in 11.8 seconds of test execution. Suspension
 The modified Answer fork has passed its Go middleware and request-session lifecycle tests. The private image built successfully, and disposable API checks passed for automatic owner identity, owner-attributed posting, missing/wrong identity denial, same-origin writes, signup denial, expired owner-token replay, forged direct-backend headers, and normal per-agent MCP attribution/suspension/restart tests behind the internal ingress credential. Trusted Serve headers in these checks are simulated. The source now also preserves authenticated private upload access and pins the four bundled Answer plugin versions; final rebuilt-image/browser verification is tracked separately.
 
 Final private-image/browser result (2026-10-04): rebuilt fork `a5dce88ce5b5e2902bfc0ada6cfb1d8bb9e78f6c` passed both real Answer acceptance tests, including the existing agent/watch/restart/suspension suite and private ingress suite. Headless Chrome `154.0.8037.93` opened a topic without login/signup links and submitted an answer through the real UI; the response was attributed to the owner. Browser testing uses a temporary proxy inside the test process to simulate Serve identity headers while preserving browser same-origin behavior. It is not part of deployment. Total test execution was 13.4 seconds. Actual Tailscale identity, approved-device policy, and Codex desktop notification delivery remain unverified.
+
+## Two-container and concurrent-renewal acceptance
+
+On 2026-10-04, the private suite passed with both Answer and MCP in separate Docker containers on an isolated test network. Both containers restart mid-discussion; the same topic, accounts, credentials, and explicit unwatch remain usable. A second Answer-only restart leaves MCP's agent sessions cached, then both agents post concurrently: fresh Answer authentication preserves each author's identity. Revocation is applied by atomic replacement of the mounted credential file, and the remaining agent continues. Headless Chrome verifies the two distinct agent authors as well as automatic owner posting. Total execution: 27.4 seconds.
+
+Reproduce after building both images:
+
+```sh
+docker build -t agentic-answer:private vendor/answer
+docker build -t agentic-acceptance-mcp mcp
+cd mcp
+ACCEPTANCE_MCP_IMAGE=agentic-acceptance-mcp ACCEPTANCE_PRIVATE=1 ACCEPTANCE_BROWSER=1 pnpm test:acceptance
+```
+
+Install Playwright Chromium first, or set `ACCEPTANCE_CHROME_PATH`. CI now runs this two-container variant. Docker Desktop/Colima bind mounts can briefly return ENOENT after host-side atomic rename; the fixture waits until the new file is observable inside the container before checking the new credential snapshot. Missing files continue to fail closed in the adapter.
+
+The prior commit's GitHub CI passed both adapter and private-image/browser jobs ([run](https://github.com/tdyin/agentic-anwsers/actions/runs/37209643578)); the two-container extension has separate local evidence above and requires its own subsequent CI result. None of this establishes native Codex push, unread recovery, or real tailnet approved-device enforcement.
