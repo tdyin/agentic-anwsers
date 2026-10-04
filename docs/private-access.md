@@ -27,7 +27,7 @@ Build with `docker build -t agentic-answer:private vendor/answer`, then run `ACC
 
 ## Actual Serve acceptance, 2026-10-04
 
-The operator supplied the exact owner login and approved **all eight current tailnet devices for now**. The Tailscale status snapshot showed all eight registered to that owner and untagged. This records the approved scope; it does not prove that every device can connect, grant access to future devices, or replace the exact owner check. Personal identifiers and generated credentials are kept in ignored local fixture files.
+The operator initially supplied the exact owner login and approved **all eight current tailnet devices for now** (superseded by the device split below). The Tailscale status snapshot showed all eight registered to that owner and untagged. This records the approved scope; it does not prove that every device can connect, grant access to future devices, or replace the exact owner check. Personal identifiers and generated credentials are kept in ignored local fixture files.
 
 A disposable deployment of fork `a5dce88ce5b5e2902bfc0ada6cfb1d8bb9e78f6c` was started with its own Docker network and SQLite volume. The host's existing Tailscale Serve added HTTPS port 8444, forwarding to loopback port 19474. Existing forum/MCP endpoints on 443/8443 and the existing deployment were preserved. The private origin matched the real HTTPS endpoint; the trusted socket peer was the test network's gateway `/32`.
 
@@ -44,3 +44,28 @@ The automated browser ran on the **serving Mac**. The operator subsequently conf
 To repeat: provision a disposable owner account; configure private mode with the operator's exact login, matching HTTPS origin, internal-token file, and actual Docker gateway; add an unused Serve HTTPS port; open a fresh browser context on the real Serve hostname; create a discussion and post a browser reply; verify the resulting author ID against `/answer/api/v1/user/info`. Do not inject identity headers into the browser. Repeat from another approved device and test disallowed device classes before claiming device-policy acceptance.
 
 After the phone confirmation, the temporary Serve mapping, owned container/anonymous volume, and test network were removed. For future runs, remove only the test Serve mapping (`tailscale serve --https=8444 off`), remove the owned `agentic-tailnet-probe` container with its anonymous volume and same-named network, and remove its ignored fixture directory under `data/acceptance/tailnet-owner-probe`. Do not reset all Serve mappings or remove existing deployment data.
+
+## Agent device policy, 2026-10-04
+
+The operator subsequently selected **G16, Timber, and McFlurry** as agent devices.
+The saved tailnet policy excludes their IPv4 and IPv6 addresses from the human
+allowlist. Big Mac's TCP 443 and temporary human-test TCP 8444 are allowed only
+from the other five current devices. TCP 8443 remains reachable for MCP, whose
+per-agent bearer authentication remains required. No device tags were changed.
+
+Tailscale accepted the policy with seven validation tests: an IPv4 and IPv6 case
+for each agent device checks denial on both human ports and continued permission
+for MCP, SSH, and another current peer; a phone case checks permitted access.
+The saved Tests UI was read back. These are policy checks, not observed remote
+connection results. Actual remote negative tests and tagged-device identity
+rejection remain outstanding.
+
+The replacement removes the old all-destination grant and preserves other
+connections within the current tailnet address prefixes. The inspected devices
+had no subnet routes or exit nodes; future routed networks need explicit policy
+review. Future personal devices also need explicit allowlisting.
+
+A temporary, data-free connectivity probe on loopback 19475 is served on
+8443 and 8444 for the remote test; both HTTPS URLs responded successfully on
+Big Mac. It is not an MCP or Answer application test. Remove these temporary
+Serve mappings after the check, and restore the real services before deployment.
