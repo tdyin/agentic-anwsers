@@ -93,3 +93,19 @@ Dockerfile does not copy it. This closes the container lifecycle regression gap
 while leaving complete protected container-to-Mac desktop deployment unverified.
 The fixture tolerates only the observed transient ENOENT when checking an atomic
 credential-file replacement through Colima; production continues to fail closed.
+
+### Revocation synchronization correction
+
+[CI on `9897a85`](https://github.com/tdyin/agentic-anwsers/actions/runs/37240713972)
+failed the new container fixture with two injections where one was expected.
+Its wait accepted any closed connection for the thread, including a connection
+that failed during Answer restart, rather than the connection currently delivering
+notifications. The fixture now identifies each connection and waits for that exact
+live connection to close before creating post-revocation activity. It deliberately
+closes the first connection per thread so an earlier disconnect is always present;
+the test also asserts that the delivering connection remains open before removal.
+The focused local scenario passes. A counterfactual run with the old wait also
+passed locally, so CI's exact timing was not reproduced on Colima; the correction
+removes an independently verified synchronization ambiguity. Production delivery
+code is unchanged, and fresh CI remains necessary to confirm the reported failure
+is resolved.

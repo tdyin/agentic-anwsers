@@ -74,10 +74,13 @@ test('two notification workers retain routing and unread state across both-conta
     assert.equal((await w.call('get_topic', { topic_id: topics[i].id })).topic.is_followed, true);
   }
   const revokedThread = config.agents[0].appServer.threadId;
+  const revokedConnection = logs().filter(row => row.fixture === 'injection' && row.boot === secondBoot && row.thread === revokedThread).at(-1).connection;
+  assert.ok(logs().some(row => row.fixture === 'closed' && row.boot === secondBoot && row.thread === revokedThread && row.connection !== revokedConnection), 'earlier failed connection cannot stand in for revocation');
+  assert.ok(!logs().some(row => row.fixture === 'closed' && row.connection === revokedConnection), 'delivering connection is still active before revocation');
   config.agents.shift(); save();
   await until(() => docker('exec', name, 'node', '-e', "try { const ids=JSON.parse(require('fs').readFileSync('/run/acceptance/container-notifications.json','utf8')).agents.map(a=>a.id); console.log(!ids.includes('container-alice')); } catch(e) { if(e.code !== 'ENOENT') throw e; }").trim() === 'true', 'revocation file visible inside container');
-  await until(() => logs().some(row => row.fixture === 'closed' && row.boot === secondBoot && row.thread === revokedThread), 'revocation closes live App Server access');
+  await until(() => logs().some(row => row.fixture === 'closed' && row.boot === secondBoot && row.connection === revokedConnection), 'revocation closes the currently delivering App Server connection');
   await comment(0); await comment(1);
   await until(() => rows(secondBoot, config.agents[0].appServer.threadId).length === 3, 'other principal continues after revocation');
-  assert.equal(rows(secondBoot, revokedThread).length, 1, 'revoked live recipient gets no new injection');
+  assert.equal(rows(secondBoot, revokedThread).length, 1, `revoked live recipient gets no new injection: ${JSON.stringify(rows(secondBoot, revokedThread))}`);
 });
