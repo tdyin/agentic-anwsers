@@ -259,3 +259,33 @@ remote connections should use TLS. It also identifies this transport as
 experimental. The currently verified desktop path remains the owner-local Unix
 socket. Protected access from the Linux MCP container to that same desktop server
 is still unverified; local and protocol-fixture successes do not satisfy it.
+
+## Model-initiated MCP consumption attempt (2026-10-04)
+
+`desktop-consumption.test.js` adds an explicit opt-in real-model gate. It creates
+one ordinary recipient and a random comment in the disposable Answer database,
+delivers only event metadata, and temporarily configures that test thread with
+the authenticated MCP endpoint. The fixture archives and immediately unarchives
+only the designated disposable thread before resuming: rejoining an already loaded
+thread retains its old MCP connections. Cleanup resumes it without test overrides;
+no global config file is edited. Use only a disposable test thread for this gate.
+
+Turn `01a10917-00d4-7fc3-a8d6-600b57df8e0c` successfully invoked
+`answer_acceptance.list_comments` for topic `10010000000000020`, read comment
+`10070000000000022`, and returned its exact random text:
+`comment-proof-603815ff-cc4b-49bb-ab67-7f7ddfe2a076`. That text was absent from the
+injected metadata and verification prompt. The read completed in 10 ms.
+
+The model then requested `acknowledge_notification` for notification `1`, but
+Codex rejected the call before execution: **MCP tool call requires approval, but
+approval policy is never**. Answer correctly retained its unread event. Thus
+model-driven reading passes, but the combined read-and-acknowledge gate does not.
+The denial was reported to the operator and approval requested; the fixture does
+not bypass it or treat a failed tool call as acknowledgement evidence.
+
+The gate is opt-in with `ACCEPTANCE_MODEL_TOOLS=1`,
+`ACCEPTANCE_TEST_PATTERN='actual desktop thread consumes'`, and the private/shared
+App Server environment. It waits for the actual `turn/completed` notification:
+an early paginated history response can transiently show an interrupted status
+while a newly started turn is still running, so history alone must not end the
+fixture. Default CI skips this real-model gate and cannot certify it.

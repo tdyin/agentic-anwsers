@@ -57,7 +57,7 @@ try {
     await delay(500);
   }
   if (!ready) throw new Error('Disposable Answer instance did not become ready.');
-  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...(process.env.ACCEPTANCE_TEST_PATTERN ? ['--test-name-pattern', process.env.ACCEPTANCE_TEST_PATTERN] : []), 'test/answer-acceptance.test.js', ...(privateMode ? ['test/private-acceptance.test.js', 'test/notification-recovery.test.js', 'test/container-notifications.test.js'] : [])], {
+  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...(process.env.ACCEPTANCE_TEST_PATTERN ? ['--test-name-pattern', process.env.ACCEPTANCE_TEST_PATTERN] : []), 'test/answer-acceptance.test.js', ...(privateMode ? ['test/private-acceptance.test.js', 'test/notification-recovery.test.js', 'test/container-notifications.test.js', 'test/desktop-consumption.test.js'] : [])], {
     cwd: new URL('..', import.meta.url), stdio: 'inherit',
     env: { ...process.env, ACCEPTANCE_ANSWER_URL: baseUrl, ACCEPTANCE_RESTART_CONTAINER: name, ACCEPTANCE_NETWORK: network, ACCEPTANCE_WORK_DIR: directory,
       ADMIN_EMAIL: 'owner@example.com', ADMIN_PASSWORD: adminPassword, ACCEPTANCE_INTERNAL_TOKEN: internalToken },

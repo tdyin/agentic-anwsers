@@ -79,7 +79,7 @@ export async function acceptanceWatcher(t, { baseUrl, internalToken, appServer, 
   const pauseDelivery = async () => { const stop = stopWorker; stopWorker = undefined; await stop?.(); };
   resumeDelivery();
   t.after(pauseDelivery);
-  return { credentials: config, answer, call, received, delivered, batches, admin, pauseDelivery, resumeDelivery,
+  return { mcpUrl: `http://127.0.0.1:${listener.address().port}/mcp`, credentials: config, answer, call, received, delivered, batches, admin, pauseDelivery, resumeDelivery,
     revoke() { enabled = false; registry.reload(); },
     set beforeBatch(callback) { beforeBatch = callback; },
     async event(kind, objectId) {
