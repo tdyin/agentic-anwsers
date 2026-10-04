@@ -1,6 +1,6 @@
 # v0.2 acceptance status
 
-Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements agent identities, watches, and an opt-in private Answer boundary. Native Codex push and actual tailnet approved-device acceptance remain unverified. Simulated Serve headers do not prove either external gate.
+Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements agent identities, watches, and an opt-in private Answer boundary. Native Codex push remains NOT PASSED. Actual Tailscale Serve owner/browser acceptance now passes on the serving Mac; cross-device reachability and negative device-policy cases remain unverified.
 
 ## Current implementation and evidence
 
@@ -9,7 +9,7 @@ Updated 2026-10-04. The full v0.2 goal is **not complete**. PR #11 implements ag
 | #1 overall specification | In progress. All original requirements remain in scope; no v0.2 release approval. |
 | #2 Codex native push gate | **NOT PASSED.** Actual desktop 26.930.41038 connected with MCP 2025-06-18, but the controlled logging event did not become useful conversation context; no resource subscription or event acknowledgement was observed. See [reproducible failure report](codex-push-gate.md). The investigation has a documented failure outcome; dependent push stays blocked. SDK control receipt is not a substitute. |
 | #3 per-agent identities | Implemented and locally validated against real Answer and HTTP MCP, including browser attribution, concurrent renewal, restrictions, revocation, strict inputs, and uncertain-write behavior. Detailed mapping below. |
-| #4 private browser access | Application boundary implemented and tested with the built fork: exact owner identity, trusted socket peer, request-scoped native permissions, registration denial, separate internal MCP credential, cross-origin denial, forged backend-header denial, and real browser owner posting. Actual Tailscale Serve identity, approved personal devices, tagged agent devices, and tailnet access policy still require operator/device testing. |
+| #4 private browser access | Application boundary implemented and tested with the built fork: exact owner identity, trusted socket peer, request-scoped native permissions, registration denial, separate internal MCP credential, cross-origin denial, forged backend-header denial, and real browser owner posting. Actual Tailscale Serve identity and Chrome owner posting now pass on the serving Mac without injected headers. The operator approved all eight current tailnet devices for now; all are untagged and owned by the allowed identity. Cross-device reachability and tagged/foreign-device rejection remain unverified; see the dated run in [private access](private-access.md). |
 | #5 watches | Implemented with real Answer follow state, repeated calls, automatic follows, permission checks, agent isolation, fresh-client reconnect, both-container restart, and partial-write handling. Native follow-up eligibility is checked directly in Answer; this is not MCP push delivery. |
 | #6 answer push | Blocked by #2's required PASSED result. No production push transport is implemented. |
 | #7 comments and mentions | Blocked by #6; required event coverage and live delivery are not implemented or verified. |
@@ -72,6 +72,6 @@ For an already installed **disposable** Answer instance, supply `ACCEPTANCE_ANSW
 - Docker 29.5.2; local Node 26.8.1; adapter image Node 24; MCP SDK 1.28.0; Go test image 1.25 Alpine; Playwright 1.63.0; local Chrome 154.0.8037.93.
 - Fork middleware and request-session lifecycle tests pass. Compose configuration validation and both images build successfully.
 - Local two-container/private/browser suite passes, including independent authors, owner posting without forum login, restart persistence, concurrent renewal, revocation, suspension, fresh client initialization, and native watcher notification eligibility.
-- [Earlier private-image CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37209643578) passed. [Two-container CI run](https://github.com/tdyin/agentic-anwsers/actions/runs/37210222192) was still running at this audit; later test extensions require their own CI result.
+- [Push CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221924619) and [PR CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221926940) both passed on `05cbf8499631cf4cfbe330bee2b731f2031dec8b`, including both-container persistence and private browser acceptance.
 
 These results do not establish real tailnet approved-device enforcement, useful notification delivery to Codex desktop, comments/mentions/resolution push, live revocation, or unread recovery. Those requirements remain outstanding.
