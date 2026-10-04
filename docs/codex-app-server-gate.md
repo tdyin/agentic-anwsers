@@ -218,3 +218,44 @@ Without the App Server environment variables, this recovery test uses a real
 WebSocket protocol fixture; that mode is transport regression evidence only.
 This run proves Answer container persistence and fresh notification-worker
 recovery, not a full MCP container restart or fresh native desktop UI observation.
+
+## Two existing desktop threads (2026-10-04)
+
+The real Answer fixture now configures independent ordinary principals against
+threads `01a108b3-eb21-7be2-9d2f-8c95f3f1face` and
+`01a10805-851d-7193-88df-cd0475e4d684`. Both were existing desktop-created test
+threads on the shared App Server. Every delivered batch is checked against the
+recipient bound to that target. After suspension and credential removal for the
+first principal, a new human comment still reached the second target and produced
+no additional delivery to the first.
+
+Explicit no-tool verification turns returned the exact source records:
+
+| Recipient | Latest notification | Comment object | Verification turn | Duration |
+| --- | --- | --- | --- | --- |
+| `2` | `15` | `10070000000000039` | `01a10913-7db9-7690-8ca2-5c7be3f155d8` | 5,601 ms |
+| `3` | `17` | `10070000000000041` | `01a10913-7e48-70b2-a0d4-20e32df53e2d` | 3,689 ms |
+
+Both records had type `comment.created`, actor `1`, and topic
+`10010000000000025`. Each verification turn contained only its user prompt and
+model response. Prompts contained no expected IDs. This verifies two independent
+model-visible routes through the host worker; fresh native UI observation,
+model-initiated MCP consumption, and complete container deployment remain separate.
+
+Reproduce with the shared-server environment from the preceding run, plus
+`ACCEPTANCE_APP_SERVER_THREAD_B` set to the second existing test thread and
+`ACCEPTANCE_TEST_PATTERN='real Answer attributes'`. The pattern selects the main
+integration scenario; other integration files do not execute their test bodies.
+
+## Protected endpoint investigation (2026-10-04)
+
+The installed Tailscale Serve help supports proxying Unix sockets, but proxy
+support alone does not establish authorization for the desktop administrative
+socket. No Serve mapping or control-socket exposure was added. The installed
+Codex CLI supports capability-token and signed-bearer WebSocket authentication.
+[Official App Server documentation](https://learn.chatgpt.com/docs/app-server)
+requires a bearer credential during the upgrade for configured WebSocket auth;
+remote connections should use TLS. It also identifies this transport as
+experimental. The currently verified desktop path remains the owner-local Unix
+socket. Protected access from the Linux MCP container to that same desktop server
+is still unverified; local and protocol-fixture successes do not satisfy it.

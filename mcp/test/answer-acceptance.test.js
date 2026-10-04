@@ -174,7 +174,12 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     const stop = startNotifications(agents, { clientFactory: options => {
       const client = new AppServerClient(options);
       const deliver = client.deliver.bind(client);
-      client.deliver = async events => { await deliver(events); desktopDeliveries.push(...events); };
+      const recipient = identities[config.agents.findIndex(agent => agent.appServer?.threadId === options.target.threadId)];
+      client.deliver = async events => {
+        assert.ok(events.every(event => event.recipientId === recipient), 'thread receives only its configured principal');
+        await deliver(events);
+        desktopDeliveries.push(...events);
+      };
       return client;
     } });
     t.after(stop);
@@ -355,4 +360,14 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   }
   await assert.rejects(clients[0].listTools(), /Invalid MCP bearer token/);
   await clients[1].listTools();
+  if (process.env.ACCEPTANCE_APP_SERVER_THREAD_B) {
+    const before = desktopDeliveries.filter(e => e.recipientId === identities[0]).length;
+    const finalComment = await admin.call('comment', { method: 'POST', body: { object_id: topicIds[1], original_text: 'Final live event for the remaining independent desktop recipient.' } });
+    for (let i = 0; i < 100 && !desktopDeliveries.some(e => e.objectId === finalComment.comment_id); i++) await delay(100);
+    const final = desktopDeliveries.find(e => e.objectId === finalComment.comment_id);
+    assert.ok(final, 'second actual thread continues receiving after first principal revocation');
+    assert.equal(final.recipientId, identities[1]);
+    assert.equal(desktopDeliveries.filter(e => e.recipientId === identities[0]).length, before);
+    console.log(`Two-thread verification required: ${JSON.stringify(identities.map((recipientId, index) => ({ threadId: index ? process.env.ACCEPTANCE_APP_SERVER_THREAD_B : process.env.ACCEPTANCE_APP_SERVER_THREAD, recipientId, last: desktopDeliveries.filter(e => e.recipientId === recipientId).at(-1) })))}`);
+  }
 });
