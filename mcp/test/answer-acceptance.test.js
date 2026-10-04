@@ -26,6 +26,7 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   const suffix = randomBytes(4).toString('hex');
   const config = { agents: ['alice', 'bob'].map(id => ({ id, email: `${id}-${suffix}@example.com`, password: randomBytes(12).toString('hex'), token: randomBytes(32).toString('hex') })) };
   const identities = [];
+  const usernames = [];
   for (const agent of config.agents) {
     const response = await fetch(new URL('/answer/admin/api/user', baseUrl), {
       method: 'POST', headers: { ...internalHeaders, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
@@ -36,6 +37,7 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     const info = await principal.request('user/login/email', { method: 'POST', body: { e_mail: agent.email, pass: agent.password } });
     assert.equal(info.role_id, 1, 'agent must not be administrator');
     identities.push(info.id);
+    usernames.push(info.username);
   }
   assert.notEqual(identities[0], identities[1]);
   await admin.call('question', { method: 'POST', body: { title: `Acceptance seed ${suffix}`, content: 'Seed question for agent acceptance testing.', tags: [{ slug_name: 'discussion' }] } });
@@ -197,7 +199,7 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     t.after(() => streamAbort.abort());
     const response = await fetch(new URL('/answer/api/v1/notification/agent/events', baseUrl), {
       headers: { ...internalHeaders, Authorization: `Bearer ${watcher.token}` },
-      signal: AbortSignal.any([streamAbort.signal, AbortSignal.timeout(45000)]),
+      signal: AbortSignal.any([streamAbort.signal, AbortSignal.timeout(120000)]),
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /text\/event-stream/);
@@ -247,6 +249,72 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     for (let attempt = 0; attempt < 100 && !desktopDeliveries.some(event => event.notificationId === followedEvent.id); attempt++) await delay(100);
     assert.ok(desktopDeliveries.some(event => event.notificationId === followedEvent.id), 'real Answer event accepted by designated App Server thread');
     console.log(`Desktop context verification required: ${JSON.stringify({ notificationId: followedEvent.id, recipientId: identities[0], topicId: topicIds[1], objectId: humanAnswer.info.id })}`);
+  }
+  // An explicit acknowledgement is scoped to the caller, never to supplied attribution.
+  await call(clients[1], 'acknowledge_notification', { notification_id: followedEvent.id });
+  const beforeOwnAck = await watcher.call('notification/page', { query: { type: 'inbox', page: 1, page_size: 50 } });
+  assert.equal(beforeOwnAck.list.find(item => item.id === followedEvent.id)?.is_read, false, 'another agent cannot consume this notification');
+  await call(clients[0], 'get_topic', { topic_id: topicIds[1] });
+  const readOnlyInbox = await watcher.call('notification/page', { query: { type: 'inbox', page: 1, page_size: 50 } });
+  assert.equal(readOnlyInbox.list.find(item => item.id === followedEvent.id)?.is_read, false, 'read tools alone do not acknowledge');
+  await call(clients[0], 'acknowledge_notification', { notification_id: followedEvent.id });
+  await call(clients[0], 'acknowledge_notification', { notification_id: followedEvent.id });
+  const afterOwnAck = await watcher.call('notification/page', { query: { type: 'inbox', page: 1, page_size: 50 } });
+  assert.equal(afterOwnAck.list.find(item => item.id === followedEvent.id)?.is_read, true, 'explicit consumption is idempotent in Answer');
+  if (internalToken) {
+    const unread = await watcher.call('notification/agent/page', { query: { after: '0', limit: 100 } });
+    assert.ok(!unread.events.some(event => event.notificationId === followedEvent.id), 'acknowledged events leave unread recovery');
+  }
+  if (internalToken) {
+    const commentEvent = async (comment, kind) => {
+      let matched;
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const page = await watcher.call('notification/agent/page', { query: { after: '0', limit: 100 } });
+        matched = page.events.filter(event => event.objectId === comment.comment_id);
+        if (matched.length) break;
+        await delay(100);
+      }
+      assert.equal(matched?.length, 1, 'one persisted notification per recipient/activity');
+      assert.equal(matched[0].kind, kind);
+      await readStreamUntil(text => text.includes(`"notificationId":"${matched[0].notificationId}"`));
+      if (process.env.ACCEPTANCE_APP_SERVER_URL) {
+        for (let attempt = 0; attempt < 100 && !desktopDeliveries.some(event => event.notificationId === matched[0].notificationId); attempt++) await delay(100);
+        assert.ok(desktopDeliveries.some(event => event.notificationId === matched[0].notificationId), 'comment/mention reached App Server');
+        console.log(`Desktop comment context verification required: ${JSON.stringify(matched[0])}`);
+      }
+      return matched[0];
+    };
+    const humanComment = (object_id, content, mention_username_list = [], reply_comment_id) => admin.call('comment', {
+      method: 'POST', body: { object_id, original_text: content, mention_username_list, ...(reply_comment_id ? { reply_comment_id } : {}) },
+    });
+    const questionComment = await humanComment(topicIds[1], 'Human comment on watched question.');
+    await commentEvent(questionComment, 'comment.created');
+    const answerComment = await humanComment(humanAnswer.info.id, 'Author comments on their own answer; other topic watchers still receive it.');
+    await commentEvent(answerComment, 'comment.created');
+    assert.ok(usernames[0], 'provisioned identity has a native mention username');
+    const overlap = await humanComment(topicIds[1], `Mention @${usernames[0]} while watched.`, [usernames[0], usernames[0]]);
+    await commentEvent(overlap, 'mention');
+    await call(clients[0], 'unwatch_topic', { topic_id: topicIds[1] });
+    const unwatched = await humanComment(topicIds[1], 'This watch-only comment must not reach the unsubscribed agent.');
+    const bobComment = await call(clients[1], 'add_comment', { object_id: topicIds[1], content: 'Reply here while mentioning a different recipient.' });
+    const mentioned = await humanComment(topicIds[1], `Explicit @${usernames[0]} without a watch while replying to Bob.`, [usernames[0]], bobComment.comment_id);
+    await commentEvent(mentioned, 'mention');
+    assert.equal((await call(clients[0], 'get_topic', { topic_id: topicIds[1] })).topic.is_followed, false, 'mention does not silently rewatch');
+    await call(clients[0], 'watch_topic', { topic_id: topicIds[1] });
+    const self = await call(clients[0], 'add_comment', { object_id: topicIds[1], content: 'My own activity must not notify me.' });
+    const barrier = await humanComment(topicIds[1], 'Human comment after self-event to confirm the live path remains usable.');
+    await commentEvent(barrier, 'comment.created');
+    const native = await watcher.call('notification/page', { query: { type: 'inbox', page: 1, page_size: 50 } });
+    assert.equal(native.list.filter(item => item.object_info?.object_map?.comment === overlap.comment_id).length, 1, 'watch/mention overlap creates only one native inbox item');
+    assert.ok(!native.list.some(item => [unwatched.comment_id, self.comment_id].includes(item.object_info?.object_map?.comment)), 'unwatch and self suppression apply to persisted notification state');
+    const readComments = await call(clients[0], 'list_comments', { object_id: humanAnswer.info.id });
+    assert.ok(readComments.list.some(comment => comment.comment_id === answerComment.comment_id), 'changed comment can be retrieved through existing tools');
+    const badgeBefore = await watcher.call('notification/status');
+    assert.ok(badgeBefore.inbox > 0, 'other unread notifications remain');
+    await call(clients[0], 'acknowledge_notification', { notification_id: followedEvent.id });
+    const badgeAfter = await watcher.call('notification/status');
+    assert.equal(badgeAfter.inbox, badgeBefore.inbox, 'repeated acknowledgement cannot consume another unread badge');
+
   }
   // Suspension must be enforced by Answer even with a cached adapter session.
   await admin.login();

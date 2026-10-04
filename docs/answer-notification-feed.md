@@ -43,3 +43,19 @@ acknowledgement isolation. The MCP service now coordinates this stream with unre
 Server targets; see [agent credentials](agent-credentials.md). Real Answer HTTP
 acceptance also verifies live receipt, unchanged unread state, and suspension
 closing the connection. Full actual-desktop deployment acceptance remains open.
+
+## Comment recipients and acknowledgement
+
+Comment creation and review approval collect direct reply, mention, and parent
+author recipients before sending one follower seed. The receiving actor and all
+direct recipients are excluded from the follower list, including duplicate
+follow rows. An author commenting on their own answer still notifies other topic
+watchers. Repeated mentions of the same identity produce one direct notification.
+Mentions do not add follows, and explicit unwatch does not disable mention routing.
+Comment replies use `comment.created` metadata with the native comment ID.
+
+The `acknowledge_notification` MCP tool calls Answer's recipient-scoped read API.
+The fork changes unread state atomically; only the first successful transition
+updates the unread badge. Repeated and concurrent acknowledgement requests cannot
+consume the badge count of unrelated unread notifications. The SQLite regression
+issues 20 concurrent requests and verifies exactly one transition.

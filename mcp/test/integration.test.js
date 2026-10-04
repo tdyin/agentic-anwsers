@@ -52,7 +52,7 @@ test('SDK client completes authenticated tool calls against Answer HTTP contract
   await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
   t.after(() => client.close());
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['add_comment', 'create_reply', 'create_topic', 'get_topic', 'list_comments', 'list_replies', 'search_topics', 'unwatch_topic', 'watch_topic']);
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['acknowledge_notification', 'add_comment', 'create_reply', 'create_topic', 'get_topic', 'list_comments', 'list_replies', 'search_topics', 'unwatch_topic', 'watch_topic']);
   assert.ok(tools.every(tool => !tool.annotations.destructiveHint));
   const call = async (name, args) => {
     const result = await client.callTool({ name, arguments: args });
@@ -74,6 +74,16 @@ test('SDK client completes authenticated tool calls against Answer HTTP contract
   assert.equal(requests.at(-1).query.page, '3');
   await call('list_comments', { object_id: 'AbC123' });
   assert.equal(requests.at(-1).query.object_id, 'AbC123', 'Answer short IDs are passed through');
+  const ack = await call('acknowledge_notification', { notification_id: '9007199254740993' });
+  assert.deepEqual(ack, { notification_id: '9007199254740993', acknowledgement: 'submitted' });
+  assert.deepEqual(requests.at(-1), { path: '/answer/api/v1/notification/read/state', method: 'PUT', query: {}, body: { id: '9007199254740993' } });
+  const ackTool = tools.find(tool => tool.name === 'acknowledge_notification');
+  assert.equal(ackTool.annotations.idempotentHint, true);
+  assert.equal(ackTool.annotations.readOnlyHint, false);
+  const ackRequests = requests.length;
+  const override = await client.callTool({ name: 'acknowledge_notification', arguments: { notification_id: '1', user_id: 'someone-else' } });
+  assert.ok(override.isError);
+  assert.equal(requests.length, ackRequests, 'acknowledgement cannot override attribution');
   rejectNext = true;
   await call('list_replies', { topic_id: '12' });
   assert.equal(logins, 2, 'expired sessions trigger reauthentication');

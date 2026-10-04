@@ -76,5 +76,13 @@ export function createServer(answer) {
     ({ topic_id, page, page_size }) => answer.call('answer/page', { query: { question_id: topic_id, order: 'updated', page, page_size } }));
   register('list_comments', 'Read one page of comments on a question or answer.', { object_id: id, page, page_size: size }, true,
     ({ object_id, page, page_size }) => answer.call('comment/page', { query: { object_id, page, page_size } }));
+  register('acknowledge_notification', 'Explicitly acknowledge one notification after retrieving and consuming its referenced content. Delivery alone is not consumption. Answer applies this only to the authenticated recipient; unavailable or already-read IDs are harmless no-ops.', {
+    notification_id: z.string().regex(/^[1-9][0-9]{0,18}$/).describe('Persistent Answer notification ID; preserve as a string.'),
+  }, false, async ({ notification_id }) => {
+    await answer.call('notification/read/state', { method: 'PUT', body: { id: notification_id } });
+    // Native Answer intentionally does not disclose whether an ID belongs to
+    // another user. Report submission, not an unverified read-state assertion.
+    return { notification_id, acknowledgement: 'submitted' };
+  }, true);
   return server;
 }

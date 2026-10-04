@@ -49,3 +49,10 @@ loses this transient reconciliation memory, so unread items can reappear; delive
 is not exactly once. Answer remains authoritative, and explicit acknowledgement
 is required after consumption. Structured logs contain agent IDs, statuses, and
 batch counts, never credentials or forum bodies.
+
+Use `acknowledge_notification` with a persistent notification ID only after
+retrieving and consuming the referenced content. It calls Answer's native read
+API as the authenticated agent. Repeated calls are harmless; another recipient's
+ID cannot change their state. The result says `acknowledgement: "submitted"`
+because Answer deliberately does not disclose whether an unavailable ID belongs
+to someone else. Reads and context insertion do not call this tool automatically.
