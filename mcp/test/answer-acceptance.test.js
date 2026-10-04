@@ -165,10 +165,33 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
   // Verify native Answer follow-up eligibility independently of any MCP push transport.
   const watchedReply = await call(clients[0], 'create_reply', { topic_id: topicIds[1], content: 'Agent joins this topic and automatically follows the discussion.' });
   assert.equal(watchedReply.watch.established, true);
+  const watcher = new AnswerClient({ baseUrl, internalToken, email: config.agents[0].email, password: config.agents[0].password });
+  let streamReader;
+  let streamText = '';
+  const streamDecoder = new TextDecoder();
+  const readStreamUntil = async predicate => {
+    while (!predicate(streamText)) {
+      const chunk = await streamReader.read();
+      assert.equal(chunk.done, false, 'notification stream stays connected');
+      streamText += streamDecoder.decode(chunk.value, { stream: true });
+    }
+  };
+  if (internalToken) {
+    await watcher.login();
+    const streamAbort = new AbortController();
+    t.after(() => streamAbort.abort());
+    const response = await fetch(new URL('/answer/api/v1/notification/agent/events', baseUrl), {
+      headers: { ...internalHeaders, Authorization: `Bearer ${watcher.token}` },
+      signal: AbortSignal.any([streamAbort.signal, AbortSignal.timeout(45000)]),
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/event-stream/);
+    streamReader = response.body.getReader();
+    await readStreamUntil(text => text.includes('event: ready'));
+  }
   const humanAnswer = await admin.call('answer', { method: 'POST', body: {
     question_id: topicIds[1], content: 'Human follow-up for an independently subscribed watcher.',
   } });
-  const watcher = new AnswerClient({ baseUrl, internalToken, email: config.agents[0].email, password: config.agents[0].password });
   let followedEvent;
   // Bounded test synchronization with Answer's asynchronous queue, not a delivery implementation.
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -178,6 +201,33 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     await delay(250);
   }
   assert.ok(followedEvent, 'non-author watcher receives native Answer follow-up notification');
+  if (streamReader) {
+    await readStreamUntil(text => text.includes(`"notificationId":"${followedEvent.id}"`));
+    let after = '0';
+    let through;
+    const events = [];
+    for (let pageIndex = 0; pageIndex < 100; pageIndex++) {
+      const page = await watcher.call('notification/agent/page', { query: { after, ...(through ? { through } : {}), limit: 2 } });
+      if (through) assert.equal(page.through, through, 'snapshot boundary stays fixed');
+      through = page.through;
+      events.push(...page.events);
+      if (!page.hasMore) break;
+      assert.notEqual(page.after, after, 'cursor advances');
+      after = page.after;
+      assert.ok(pageIndex < 99, 'bounded catch-up completes');
+    }
+    const event = events.find(event => event.notificationId === followedEvent.id);
+    assert.ok(event, 'live event is also recoverable from unread snapshot');
+    assert.equal(event.recipientId, identities[0]);
+    assert.equal(event.kind, 'answer.created');
+    const eventTopic = await watcher.call('question/info', { query: { id: event.topicId } });
+    assert.equal(eventTopic.id, topicIds[1], 'canonical event topic resolves through permissioned API');
+    assert.ok(events.every(event => event.recipientId === identities[0]), 'feed contains only authenticated recipient');
+    assert.equal(new Set(events.map(event => event.notificationId)).size, events.length, 'cursor does not duplicate IDs');
+    const repeated = await watcher.call('notification/agent/page', { query: { after: '0', limit: 100 } });
+    assert.ok(repeated.events.some(event => event.notificationId === followedEvent.id), 'delivery did not acknowledge event');
+  }
+
   // Suspension must be enforced by Answer even with a cached adapter session.
   await admin.login();
   const suspended = await fetch(new URL('/answer/admin/api/user/status', baseUrl), {
@@ -185,6 +235,13 @@ test('real Answer attributes MCP topic, answer and comment writes to distinct or
     body: JSON.stringify({ user_id: identities[0], status: 'suspended', suspend_duration: 'forever' }),
   });
   assert.equal((await suspended.json()).code, 200);
+  if (streamReader) {
+    // The heartbeat checks current account status without querying forum content.
+    let done = false;
+    while (!done) ({ done } = await streamReader.read());
+    await assert.rejects(watcher.call('notification/agent/page'), 'suspended principal cannot recover notifications');
+  }
+
   const denied = await clients[0].callTool({ name: 'create_reply', arguments: { topic_id: topicIds[1], content: 'Suspended account must not publish this.' } });
   assert.ok(denied.isError, 'Answer account suspension applies to cached MCP sessions');
   const deniedWatch = await clients[0].callTool({ name: 'watch_topic', arguments: { topic_id: topicIds[1] } });
