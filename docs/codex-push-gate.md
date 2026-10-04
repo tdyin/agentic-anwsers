@@ -1,6 +1,10 @@
-# Native Codex desktop compatibility gate
+# Historical native MCP desktop compatibility test
 
 Status: **NOT PASSED — the tested native MCP notification path did not deliver useful discussion information into desktop conversation context.** Recorded 2026-10-04 for issue #2. This replaces the earlier client-unavailable report. It is a scoped compatibility failure, not a claim that every present or future native extension is unsupported.
+
+## Approved replacement, 2026-10-04
+
+The owner subsequently authorized direct Codex App Server delivery with event handling inside the existing MCP service. Revised issue #2 now requires proving model-visible delivery in the intended desktop thread, without automatic model wakeup by default. That gate is **PENDING**. The native MCP failure below remains historical evidence; it neither passes nor fails the new approach. See [the revised specification](../SPEC.md#compatibility-and-acceptance-gates).
 
 ## Actual installed client and configuration
 
@@ -71,4 +75,4 @@ A subsequent, separately identified **SDK-only control** (`probe-control-sdk-onl
 
 No working native subscription/acknowledgement contract was established. The tested logging notification did not become useful context, and automatic resource subscription was absent. Elicitation was advertised but was not repurposed as a discussion inbox; no custom client extension was assumed or implemented.
 
-Issue #2's failure-report outcome is fulfilled. **Closing that investigation does not unblock #6.** Only a documented PASSED actual-desktop result or a separate explicit product decision can change the gate. Issues #6–#9 and the complete notification loop in #10 remain incomplete. The production adapter remains stateless request/response; no polling fallback, client modification, alternate target, or companion process was introduced.
+The original issue #2 failure-report outcome was fulfilled. The owner has since made that separate product decision: revised issue #2 is pending for App Server delivery, and #6 requires that revised gate to pass. Issues #6–#9 and the complete notification loop in #10 remain incomplete. The production adapter remains stateless request/response; no polling fallback, client modification, alternate target, or companion process was introduced.
