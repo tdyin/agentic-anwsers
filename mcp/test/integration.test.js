@@ -52,7 +52,7 @@ test('SDK client completes authenticated tool calls against Answer HTTP contract
   await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
   t.after(() => client.close());
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['add_comment', 'create_reply', 'create_topic', 'get_topic', 'list_comments', 'list_replies', 'search_topics']);
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['add_comment', 'create_reply', 'create_topic', 'get_topic', 'list_comments', 'list_replies', 'search_topics', 'unwatch_topic', 'watch_topic']);
   assert.ok(tools.every(tool => !tool.annotations.destructiveHint));
   const call = async (name, args) => {
     const result = await client.callTool({ name, arguments: args });
@@ -65,9 +65,9 @@ test('SDK client completes authenticated tool calls against Answer HTTP contract
   assert.equal(topic.replies.list[0].content, 'human response');
   assert.equal(logins, 1);
   await call('create_topic', { title: 'An example topic', content: 'Discussion body', tags: ['discussion'] });
-  assert.deepEqual(requests.at(-1).body, { title: 'An example topic', content: 'Discussion body', tags: [{ slug_name: 'discussion' }] });
+  assert.deepEqual(requests.findLast(r => r.path.endsWith('/question')).body, { title: 'An example topic', content: 'Discussion body', tags: [{ slug_name: 'discussion' }] });
   await call('create_reply', { topic_id: '9007199254740993', content: 'Agent reply' });
-  assert.deepEqual(requests.at(-1).body, { question_id: '9007199254740993', content: 'Agent reply' });
+  assert.deepEqual(requests.findLast(r => r.path.endsWith('/answer')).body, { question_id: '9007199254740993', content: 'Agent reply' });
   await call('add_comment', { object_id: '9007199254740993', content: 'Agent comment', reply_comment_id: '12' });
   assert.deepEqual(requests.at(-1).body, { object_id: '9007199254740993', original_text: 'Agent comment', reply_comment_id: '12' });
   await call('list_comments', { object_id: '12', page: 3 });
@@ -176,4 +176,49 @@ test('atomic credential file replacement revokes old tokens and rejects corrupt 
   writeFileSync(file, '{');
   assert.throws(() => agents.authenticate(`Bearer ${secret}-rotated`), /Invalid agent/);
   assert.equal(agents.entries.length, 0);
+});
+
+test('watch tools resolve visible topics and report partial writes without replay', async t => {
+  const calls = [];
+  let forbidden = false;
+  let failFollow = false;
+  const backend = express();
+  backend.use(express.json());
+  backend.use((req, res) => {
+    calls.push({ path: req.path, method: req.method, body: req.body });
+    if (req.path.endsWith('/user/login/email')) return res.json({ code: 200, data: { access_token: 'session' } });
+    if (req.path.endsWith('/question/info')) {
+      if (forbidden) return res.status(403).json({ code: 403, reason: 'Forbidden' });
+      return res.json({ code: 200, data: { id: '9007199254740993' } });
+    }
+    if (req.path.endsWith('/follow')) {
+      if (failFollow) return res.status(503).json({ code: 503, reason: 'Unavailable' });
+      return res.json({ code: 200, data: { is_followed: !req.body.is_cancel } });
+    }
+    res.json({ code: 200, data: { id: '9007199254740993' } });
+  });
+  const baseUrl = await listen(backend, t);
+  const agents = new AgentRegistry({ baseUrl, readConfig: () => ({ agents: [{ id: 'agent', token: secret, email: 'agent@example.com', password: 'password' }] }) });
+  const mcpUrl = await listen(createApp({ agents }), t);
+  const client = new Client({ name: 'watch-test', version: '1' });
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
+  t.after(() => client.close());
+  for (const name of ['watch_topic', 'watch_topic', 'unwatch_topic', 'unwatch_topic']) {
+    const result = await client.callTool({ name, arguments: { topic_id: 'ShortId' } });
+    assert.ok(!result.isError);
+    assert.deepEqual(calls.at(-1).body, { object_id: '9007199254740993', is_cancel: name === 'unwatch_topic' });
+  }
+  forbidden = true;
+  const before = calls.filter(call => call.path.endsWith('/follow')).length;
+  assert.ok((await client.callTool({ name: 'watch_topic', arguments: { topic_id: 'ShortId' } })).isError);
+  assert.equal(calls.filter(call => call.path.endsWith('/follow')).length, before);
+  forbidden = false;
+  failFollow = true;
+  const result = await client.callTool({ name: 'create_topic', arguments: { title: 'Partial success', content: 'Created only once', tags: ['discussion'] } });
+  assert.ok(!result.isError, 'the content write succeeded');
+  const data = JSON.parse(result.content[0].text);
+  assert.equal(data.id, '9007199254740993');
+  assert.equal(data.watch.established, false);
+  assert.match(data.watch.warning, /Do not repeat/);
+  assert.equal(calls.filter(call => call.method === 'POST' && call.path.endsWith('/question')).length, 1);
 });
