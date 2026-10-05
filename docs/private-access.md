@@ -69,3 +69,13 @@ A temporary, data-free connectivity probe on loopback 19475 is served on
 8443 and 8444 for the remote test; both HTTPS URLs responded successfully on
 Big Mac. It is not an MCP or Answer application test. Remove these temporary
 Serve mappings after the check, and restore the real services before deployment.
+
+
+Private internal reads with an expired supplied Answer bearer now return 401
+instead of silently returning an anonymous view. This lets the adapter's existing
+per-agent renewal restore correct follow state after an Answer restart. Internal
+ingress authentication alone still does not select a user; tokenless installer
+and health/site setup routes keep their existing behavior.
+
+The temporary data-free 8443/8444 connectivity mappings were removed after the
+operator declined further device tests. Their policy rules remain saved.

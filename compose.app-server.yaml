@@ -1,0 +1,12 @@
+# Optional Unix-socket transport; see docs/agent-credentials.md.
+# The source directory must exist on the Docker daemon's host (the VM on macOS).
+services:
+  mcp:
+    user: "${APP_SERVER_UID:?Set the socket owner UID}:${APP_SERVER_GID:?Set the socket owner GID}"
+    volumes:
+      - type: bind
+        source: ${APP_SERVER_SOCKET_DIR:?Set the protected socket directory on the Docker host}
+        target: /run/codex
+        read_only: true
+        bind:
+          create_host_path: false

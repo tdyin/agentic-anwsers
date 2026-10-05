@@ -402,3 +402,32 @@ This closes the basic protected container-connectivity gap. The forward is
 session-scoped: persistent provisioning and re-establishment after Colima/SSH
 restart are not yet implemented or verified. The temporary test forward was
 removed. Complete deployment lifecycle and native UI acceptance remain open.
+
+
+## Both-container recovery against actual desktop (2026-10-04)
+
+The protected-container case now stops MCP, creates another real comment while
+it is offline, restarts Answer and MCP, then checks the same watch and exact
+unread identities. The first run exposed an expired-session bug: Answer's
+optional-auth question read returned 200 with anonymous `is_followed: false`.
+A direct invalid-bearer regression also failed against the old image (200 rather
+than 401). Fork `59855aab` marks validated private internal ingress in request
+context and rejects an expired supplied session on optional-auth reads. The
+existing adapter's 401 renewal then restores the authenticated view. Normal
+public optional-auth behavior and tokenless setup routes are unchanged.
+
+After rebuilding the fork, the actual-desktop container case passed in 12.49 s.
+Both records remained unread, the watch remained established, and no new model
+turn appeared during delivery or restart. An explicit verification turn
+`01a109c9-22c5-75a3-9961-1eb9b64e8a7b` then returned both exact records without
+tools in 7572 ms: notifications 1 and 2, recipient 2, actor 1, topic
+10010000000000020, comment objects 10070000000000022 and 10070000000000023.
+The prompt supplied no IDs. The temporary forward was removed after testing.
+
+The full local private/browser suite passed four integration cases with two
+opt-in cases skipped (actual socket and model acknowledgement). The separate
+actual-socket run above covers the former. Middleware/auth Go tests passed,
+as did all 18 adapter unit tests. The three-file Compose configuration validates.
+`compose.app-server.yaml` provides the protected socket directory mount and
+explicit UID/GID, with startup steps in the agent credential guide. No VM or SSH
+ControlMaster restart is claimed by this container-restart test.

@@ -28,6 +28,10 @@ test('private Answer maps trusted owner and denies public or forged ingress', {
   assert.equal(created.code, 200);
   const topic = await (await get(`/answer/api/v1/question/info?id=${created.data.id}`, owner)).json();
   assert.equal(topic.data.user_info.id, profile.data.id);
+  const expiredRead = await (await get(`/answer/api/v1/question/info?id=${created.data.id}`, {
+    ...internal, Authorization: 'Bearer expired-acceptance-session',
+  })).json();
+  assert.equal(expiredRead.code, 401, 'internal optional-auth reads reject expired sessions instead of returning an anonymous view');
   assert.equal((await post('/answer/api/v1/user/register/email', internal, {})).status, 403);
   const replay = await post('/answer/api/v1/question', { ...internal, Authorization: `Bearer ${profile.data.access_token}` }, body);
   assert.equal((await replay.json()).code, 401, 'owner session cannot be replayed through internal ingress');

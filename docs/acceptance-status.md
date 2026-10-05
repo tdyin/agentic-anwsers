@@ -67,7 +67,7 @@ For an already installed **disposable** Answer instance, supply `ACCEPTANCE_ANSW
 ## Versions and results
 
 - Answer contract baseline: `3b9f1370612e690a0b7f230f05e688930db4c6d3` / published 2.0.2.
-- Modified fork: `cde6ef8a` (self-authored answers and resolution added; image and real browser/live acceptance pass), explicitly built as `agentic-answer:private`.
+- Modified fork: `59855aab` (adds explicit expiry rejection for private MCP reads; see restart regression below), explicitly built as `agentic-answer:private`.
 - Bundled plugins pinned to connector-basic 1.2.12, reviewer-basic 1.0.8, captcha-basic 1.0.6, and quick-links 1.0.3.
 - Docker 29.5.2; local Node 26.8.1; adapter image Node 24; MCP SDK 1.28.0; Go test image 1.25 Alpine; Playwright 1.63.0; local Chrome 154.0.8037.93.
 - Fork middleware and request-session lifecycle tests pass. Compose configuration validation and both images build successfully.
@@ -126,3 +126,15 @@ verification returned its exact identifiers without tools. Fresh native UI
 observation is blocked by the computer-control tool's app safety restriction,
 not by a newly requested macOS Accessibility permission. Persistent transport
 setup and restart recovery remain to be integrated; see the dated App Server run.
+
+
+### Private-session read recovery
+
+The actual-desktop container test now verifies offline activity and both-container
+restart against the real shared App Server. It exposed and now covers expired
+internal read sessions returning anonymous follow state. Fork `59855aab` returns
+401 for that case; per-agent renewal restores the persisted watch. The rebuilt
+image passes this scenario, the direct expired-read regression, all four normal
+private/browser integration cases, and the middleware/auth Go checks. An explicit
+model turn returned both exact recovered records without tools. VM/SSH restart
+provisioning and native UI observation remain separate limitations.

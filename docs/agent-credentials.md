@@ -35,6 +35,37 @@ a macOS host socket cannot simply be mounted into a Linux VM container. Deployme
 must provide a reachable protected App Server endpoint and connect the desktop to
 that same server; see the [desktop gate](codex-app-server-gate.md).
 
+### Container Unix socket deployment
+
+The optional `compose.app-server.yaml` overlay mounts a protected directory from
+the Docker host at `/run/codex` and runs MCP with the socket owner's numeric UID
+and GID. Set `APP_SERVER_SOCKET_DIR`, `APP_SERVER_UID`, and `APP_SERVER_GID` in
+the ignored `.env`; use `unix:///run/codex/control.sock` in each agent's target.
+Ensure this UID can also read `data/mcp/agents.json` and the private internal token.
+The overlay refuses to create a missing source directory. Mount the directory,
+not the socket inode, so a recreated socket remains visible to a running container.
+
+On a Linux Docker host, the directory can contain the actual local App Server
+socket. On macOS/Colima, it must contain a Linux socket forwarded through the
+existing authenticated Colima SSH connection. The tested procedure and owner-only
+permissions are recorded in [the App Server report](codex-app-server-gate.md#actual-mcp-container-through-protected-ssh-socket-2026-10-04).
+Do not mount the macOS socket through a shared filesystem or expose an
+unauthenticated TCP proxy. The socket grants broad App Server access to its owner;
+only the trusted MCP container should receive this mount, never agent workloads.
+
+Start the existing services with all three overlays after establishing the socket:
+
+```sh
+docker compose -f compose.yaml -f compose.private.yaml -f compose.app-server.yaml up -d --build
+```
+
+Answer/MCP container restarts preserve the external SSH forward. If the Colima
+VM or SSH ControlMaster restarts, the operator must recreate the forward using
+the current SSH configuration. The adapter retries App Server connection with
+bounded backoff and recovers persistent unread state once the socket returns.
+Automatic provisioning of that VM-level forward is not installed by Compose.
+This adds no standalone notification process; delivery remains inside MCP.
+
 The worker connects to App Server before subscribing to Answer, reconciles one
 unread snapshot with buffered live IDs, and batches bursts over 100 milliseconds.
 Each batch checks topic visibility as the receiving Answer user. Delivery never

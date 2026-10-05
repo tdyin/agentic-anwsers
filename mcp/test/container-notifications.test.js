@@ -45,15 +45,27 @@ test('production container delivers a real notification to the existing desktop 
     object_id: topic.id, original_text: `Protected container event ${randomUUID()}`,
   } });
   const event = await watcher.event('comment.created', comment.comment_id);
-  await until(() => docker('logs', name).split('\n').some(line => {
-    try { const row = JSON.parse(line); return row.component === 'notifications' && row.agent === 'ssh-container' && row.status === 'delivered' && row.count === 1; }
-    catch { return false; }
-  }), 'production worker reports successful delivery');
+  const deliveries = () => docker('logs', name).split('\n').flatMap(line => {
+    try { const row = JSON.parse(line); return row.component === 'notifications' && row.agent === 'ssh-container' && row.status === 'delivered' ? [row] : []; }
+    catch { return []; }
+  });
+  await until(() => deliveries().some(row => row.count === 1), 'production worker reports successful delivery');
+  docker('stop', name);
+  const offlineComment = await watcher.admin.call('comment', { method: 'POST', body: {
+    object_id: topic.id, original_text: `Offline protected container event ${randomUUID()}`,
+  } });
+  const offlineEvent = await watcher.event('comment.created', offlineComment.comment_id);
+  const priorDeliveries = deliveries().length;
+  docker('restart', process.env.ACCEPTANCE_RESTART_CONTAINER);
+  docker('start', name);
+  await until(() => deliveries().slice(priorDeliveries).some(row => row.count === 2), 'fresh container recovers both persistent unread records into actual desktop');
+  assert.equal((await watcher.call('get_topic', { topic_id: topic.id })).topic.is_followed, true, 'watch persists through both-container restart');
   const after = await control.request('thread/turns/list', { threadId: target.threadId, limit: 1 });
   assert.deepEqual(after.data.map(turn => turn.id), before.data.map(turn => turn.id), 'context delivery starts no model turn');
   const unread = await watcher.answer.call('notification/agent/page', { query: { after: '0', limit: 100 } });
   assert.ok(unread.events.some(row => row.notificationId === event.notificationId), 'delivery leaves notification unread');
-  console.log(`Protected container desktop verification required: ${JSON.stringify({ threadId: target.threadId, event })}`);
+  assert.deepEqual(unread.events.map(row => row.notificationId).sort(), [event.notificationId, offlineEvent.notificationId].sort(), 'restart preserves exact unread identities');
+  console.log(`Protected container desktop verification required: ${JSON.stringify({ threadId: target.threadId, events: [event, offlineEvent], bothContainersRestarted: true })}`);
 });
 
 test('two notification workers retain routing and unread state across both-container restart and live revocation', {
