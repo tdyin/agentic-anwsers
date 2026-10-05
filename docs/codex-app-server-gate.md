@@ -431,3 +431,43 @@ as did all 18 adapter unit tests. The three-file Compose configuration validates
 `compose.app-server.yaml` provides the protected socket directory mount and
 explicit UID/GID, with startup steps in the agent credential guide. No VM or SSH
 ControlMaster restart is claimed by this container-restart test.
+
+
+## Real Serve/browser to production container and desktop (2026-10-04)
+
+The extended protected-container scenario passed on fork `59855aab` in 15.91 s.
+After the two-container restart, a fresh Chrome 154.0.8037.93 context opened the
+real host Tailscale Serve HTTPS URL, posted an owner-attributed answer without
+forum login, and accepted it through the browser UI. No identity headers were
+injected. MCP watch/read/unwatch calls used the published loopback endpoint of
+the production container with the ordinary recipient's bearer credential.
+
+Answer event 3 and resolution event 4 both reached the actual shared App Server;
+recipient 2, actor 1, topic 10010000000000020, answer 10020000000000024. Resolution
+kept the watch and unread state; explicit MCP unwatch stopped subsequent watched
+activity. Latest turn identity remained unchanged throughout context delivery.
+Explicit verification turn `01a109cf-0088-7271-84dc-251d565a1664` then returned the
+exact resolution record without tools in 3303 ms. Its prompt contained no IDs.
+
+Reproduce the protected-container command above with these additional variables:
+
+```sh
+ACCEPTANCE_SERVE_ORIGIN=https://YOUR-HOST.YOUR-TAILNET.ts.net:8444
+ACCEPTANCE_TAILSCALE_OWNER=YOUR-EXACT-TAILSCALE-LOGIN
+ACCEPTANCE_TAILSCALE_CLI=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+ACCEPTANCE_CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+```
+
+Export those variables before invoking the harness. The supplied origin must
+match this machine's actual MagicDNS hostname and use test port 8444. The harness
+requires the protected-container test pattern, private mode, socket directory,
+and MCP image; it refuses to overwrite an existing Serve listener. The actual
+owner is mapped to the disposable fixture's owner account. Cleanup removed the
+owned Serve mapping, containers, network, credentials, and temporary SSH forward.
+The earlier failed attempt was a test-observer error: its raw SSE stream ended
+when Answer restarted. The browser stage now opens a fresh observer; production
+worker recovery remains independently verified through its delivery logs.
+
+This demonstrates the combined browser/Serve/Answer/MCP/actual-App-Server route
+on the serving Mac. It does not establish fresh native Codex UI observation,
+foreign/tagged-device rejection, or automatic VM/SSH-forward provisioning.

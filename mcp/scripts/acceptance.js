@@ -14,11 +14,27 @@ const directory = mkdtempSync(join(scratch, 'run-'));
 const envFile = join(directory, 'install.env');
 const adminPassword = randomBytes(12).toString('hex');
 const privateMode = process.env.ACCEPTANCE_PRIVATE === '1';
+const serveOrigin = process.env.ACCEPTANCE_SERVE_ORIGIN;
+const tailscale = process.env.ACCEPTANCE_TAILSCALE_CLI || 'tailscale';
+let serveHost;
+if (serveOrigin) {
+  if (!privateMode || !process.env.ACCEPTANCE_VM_SOCKET_DIR || !process.env.ACCEPTANCE_MCP_IMAGE || !process.env.ACCEPTANCE_TAILSCALE_OWNER || process.env.ACCEPTANCE_TEST_PATTERN !== 'production container delivers') {
+    throw new Error('Real Serve acceptance requires private mode, an explicit owner, and the protected-container test pattern.');
+  }
+  const origin = new URL(serveOrigin);
+  const status = JSON.parse(execFileSync(tailscale, ['status', '--json'], { encoding: 'utf8' }));
+  if (origin.origin !== serveOrigin || origin.protocol !== 'https:' || origin.port !== '8444' || origin.hostname !== status.Self.DNSName.replace(/\.$/, '')) {
+    throw new Error('Use this host’s exact Tailscale HTTPS origin on disposable port 8444.');
+  }
+  serveHost = origin.host;
+  const existing = JSON.parse(execFileSync(tailscale, ['serve', 'status', '--json'], { encoding: 'utf8' }));
+  if (existing.TCP?.['8444'] || existing.Web?.[serveHost]) throw new Error('Serve port 8444 is already in use; refusing to replace it.');
+}
 const internalToken = privateMode ? randomBytes(32).toString('hex') : '';
 if (privateMode) writeFileSync(join(directory, 'internal-token'), internalToken, { mode: 0o600 });
 writeFileSync(envFile, [
   'AUTO_INSTALL=true', 'DB_TYPE=sqlite3', 'DB_FILE=/data/answer.db',
-  'LANGUAGE=en_US', 'SITE_NAME=Acceptance', 'SITE_URL=http://localhost',
+  'LANGUAGE=en_US', 'SITE_NAME=Acceptance', `SITE_URL=${serveOrigin || 'http://localhost'}`,
   'CONTACT_EMAIL=owner@example.com', 'ADMIN_NAME=Owner',
   'ADMIN_EMAIL=owner@example.com', `ADMIN_PASSWORD=${adminPassword}`,
   'EXTERNAL_CONTENT_DISPLAY=always_display', '',
@@ -30,15 +46,16 @@ const hostPort = reservation.address().port;
 await new Promise(resolve => reservation.close(resolve));
 let created = false;
 let networkCreated = false;
+let serveCreated = false;
 const network = `${name}-net`;
 try {
   execFileSync('docker', ['network', 'create', network], { stdio: 'pipe' });
   networkCreated = true;
   const privateArgs = privateMode ? [
     '-v', `${directory}:/run/acceptance:ro`,
-    '-e', 'ANSWER_TAILSCALE_OWNER=owner@example.com', '-e', 'ANSWER_OWNER_EMAIL=owner@example.com',
+    '-e', `ANSWER_TAILSCALE_OWNER=${serveOrigin ? process.env.ACCEPTANCE_TAILSCALE_OWNER : 'owner@example.com'}`, '-e', 'ANSWER_OWNER_EMAIL=owner@example.com',
     '-e', `ANSWER_TRUSTED_PROXY_CIDR=${execFileSync('docker', ['network', 'inspect', network, '--format', '{{(index .IPAM.Config 0).Gateway}}'], { encoding: 'utf8' }).trim()}/32`,
-    '-e', 'ANSWER_PRIVATE_ORIGIN=https://forum.example.ts.net',
+    '-e', `ANSWER_PRIVATE_ORIGIN=${serveOrigin || 'https://forum.example.ts.net'}`,
     '-e', 'ANSWER_INTERNAL_TOKEN_FILE=/run/acceptance/internal-token',
   ] : [];
   execFileSync('docker', ['run', '-d', '--name', name, '--network', network, '--network-alias', 'answer', '-p', `127.0.0.1:${hostPort}:80`,
@@ -57,6 +74,12 @@ try {
     await delay(500);
   }
   if (!ready) throw new Error('Disposable Answer instance did not become ready.');
+  if (serveOrigin) {
+    const current = JSON.parse(execFileSync(tailscale, ['serve', 'status', '--json'], { encoding: 'utf8' }));
+    if (current.TCP?.['8444'] || current.Web?.[serveHost]) throw new Error('Serve port 8444 became occupied; refusing to replace it.');
+    execFileSync(tailscale, ['serve', '--bg', '--https=8444', baseUrl], { stdio: 'pipe' });
+    serveCreated = true;
+  }
   const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...(process.env.ACCEPTANCE_TEST_PATTERN ? ['--test-name-pattern', process.env.ACCEPTANCE_TEST_PATTERN] : []), 'test/answer-acceptance.test.js', ...(privateMode ? ['test/private-acceptance.test.js', 'test/notification-recovery.test.js', 'test/container-notifications.test.js', 'test/desktop-consumption.test.js'] : [])], {
     cwd: new URL('..', import.meta.url), stdio: 'inherit',
     env: { ...process.env, ACCEPTANCE_ANSWER_URL: baseUrl, ACCEPTANCE_RESTART_CONTAINER: name, ACCEPTANCE_NETWORK: network, ACCEPTANCE_WORK_DIR: directory,
@@ -65,7 +88,16 @@ try {
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 } finally {
-  if (created) execFileSync('docker', ['rm', '-f', '-v', name], { stdio: 'pipe' });
-  if (networkCreated) execFileSync('docker', ['network', 'rm', network], { stdio: 'pipe' });
-  rmSync(directory, { recursive: true, force: true });
+  try {
+    if (serveCreated) {
+      const current = JSON.parse(execFileSync(tailscale, ['serve', 'status', '--json'], { encoding: 'utf8' }));
+      if (current.Web?.[serveHost]?.Handlers?.['/']?.Proxy === `http://127.0.0.1:${hostPort}`) {
+        execFileSync(tailscale, ['serve', '--https=8444', 'off'], { stdio: 'pipe' });
+      }
+    }
+  } finally {
+    if (created) execFileSync('docker', ['rm', '-f', '-v', name], { stdio: 'pipe' });
+    if (networkCreated) execFileSync('docker', ['network', 'rm', network], { stdio: 'pipe' });
+    rmSync(directory, { recursive: true, force: true });
+  }
 }

@@ -79,3 +79,12 @@ and health/site setup routes keep their existing behavior.
 
 The temporary data-free 8443/8444 connectivity mappings were removed after the
 operator declined further device tests. Their policy rules remain saved.
+
+
+A subsequent combined run on fork `59855aab` repeated actual Serve owner browser
+posting and accepted-answer resolution, then verified delivery through the
+production MCP container into the existing Mac App Server. This removes the
+previous separation between browser/Serve and container/desktop evidence; see
+[the combined run](codex-app-server-gate.md#real-servebrowser-to-production-container-and-desktop-2026-10-04).
+The test ran on the serving Mac and does not substitute for remaining remote
+negative identity/device cases.

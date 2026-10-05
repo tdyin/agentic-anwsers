@@ -7,6 +7,9 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acceptanceWatcher } from '../scripts/acceptance-watcher.js';
 import { AppServerClient } from '../src/app-server.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { createServer as createSocket } from 'node:net';
 
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 async function until(check, label) {
@@ -30,17 +33,34 @@ test('production container delivers a real notification to the existing desktop 
     appServer: { url: 'unix:///run/codex/control.sock', threadId: target.threadId },
   }] }), { mode: 0o600 });
   const name = `${process.env.ACCEPTANCE_RESTART_CONTAINER}-desktop`;
+  const reservation = createSocket();
+  await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
+  const port = reservation.address().port;
+  await new Promise(resolve => reservation.close(resolve));
   docker('run', '-d', '--name', name, '--network', process.env.ACCEPTANCE_NETWORK,
     '--user', `${process.getuid()}:${process.getgid()}`, '--read-only', '--cap-drop=ALL',
     '--mount', `type=bind,src=${process.env.ACCEPTANCE_VM_SOCKET_DIR},dst=/run/codex,readonly`,
+    '-p', `127.0.0.1:${port}:3000`,
     '-v', `${directory}:/run/acceptance:ro`, '-e', 'ANSWER_BASE_URL=http://answer',
     '-e', 'MCP_AGENTS_FILE=/run/acceptance/desktop-container.json',
     '-e', 'ANSWER_INTERNAL_TOKEN_FILE=/run/acceptance/internal-token', process.env.ACCEPTANCE_MCP_IMAGE);
   t.after(() => docker('rm', '-f', '-v', name));
+  const mcpUrl = `http://127.0.0.1:${port}`;
+  await until(async () => { try { return (await fetch(`${mcpUrl}/healthz`)).ok; } catch { return false; } }, 'production MCP endpoint ready');
+  const client = new Client({ name: 'protected-container-client', version: '1' });
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`), {
+    requestInit: { headers: { Authorization: `Bearer ${watcher.credentials.token}` } },
+  }));
+  t.after(() => client.close());
+  const call = async (tool, args) => {
+    const response = await client.callTool({ name: tool, arguments: args });
+    assert.ok(!response.isError, JSON.stringify(response));
+    return JSON.parse(response.content[0].text);
+  };
   const topic = await watcher.admin.call('question', { method: 'POST', body: {
     title: 'Protected container desktop delivery', content: 'Disposable SSH socket acceptance.', tags: [{ slug_name: 'socket-test' }],
   } });
-  await watcher.call('watch_topic', { topic_id: topic.id });
+  await call('watch_topic', { topic_id: topic.id });
   const comment = await watcher.admin.call('comment', { method: 'POST', body: {
     object_id: topic.id, original_text: `Protected container event ${randomUUID()}`,
   } });
@@ -59,12 +79,21 @@ test('production container delivers a real notification to the existing desktop 
   docker('restart', process.env.ACCEPTANCE_RESTART_CONTAINER);
   docker('start', name);
   await until(() => deliveries().slice(priorDeliveries).some(row => row.count === 2), 'fresh container recovers both persistent unread records into actual desktop');
-  assert.equal((await watcher.call('get_topic', { topic_id: topic.id })).topic.is_followed, true, 'watch persists through both-container restart');
+  // Read through both the fresh production container and the surviving host
+  // client, so expired optional-auth sessions cannot silently look anonymous.
+  assert.equal((await call('get_topic', { topic_id: topic.id })).topic.is_followed, true, 'production MCP watch persists through both-container restart');
+  assert.equal((await watcher.call('get_topic', { topic_id: topic.id })).topic.is_followed, true, 'surviving client renews its expired session');
+  const recovered = await watcher.answer.call('notification/agent/page', { query: { after: '0', limit: 100 } });
+  assert.deepEqual(recovered.events.map(row => row.notificationId).sort(), [event.notificationId, offlineEvent.notificationId].sort(), 'restart preserves exact unread identities');
+  if (process.env.ACCEPTANCE_SERVE_ORIGIN) {
+    const { verifyServedDiscussion } = await import('../scripts/acceptance-served-discussion.js');
+    await verifyServedDiscussion(t, { topic, watcher, call, deliveries });
+  }
   const after = await control.request('thread/turns/list', { threadId: target.threadId, limit: 1 });
   assert.deepEqual(after.data.map(turn => turn.id), before.data.map(turn => turn.id), 'context delivery starts no model turn');
   const unread = await watcher.answer.call('notification/agent/page', { query: { after: '0', limit: 100 } });
   assert.ok(unread.events.some(row => row.notificationId === event.notificationId), 'delivery leaves notification unread');
-  assert.deepEqual(unread.events.map(row => row.notificationId).sort(), [event.notificationId, offlineEvent.notificationId].sort(), 'restart preserves exact unread identities');
+  assert.ok(unread.events.some(row => row.notificationId === offlineEvent.notificationId), 'restart preserves offline unread identity');
   console.log(`Protected container desktop verification required: ${JSON.stringify({ threadId: target.threadId, events: [event, offlineEvent], bothContainersRestarted: true })}`);
 });
 
