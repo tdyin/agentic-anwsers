@@ -1,6 +1,6 @@
-# Private Answer access (implementation in progress)
+# Private Answer access
 
-The private overlay builds the checked-out Answer fork and adds an opt-in request boundary inside Answer. It does not add a gateway process. Real Tailscale/browser/device acceptance is still required before using this as a verified deployment.
+The private overlay builds the checked-out Answer fork and adds an opt-in request boundary inside Answer. It does not add a gateway process. Configured actual Serve/browser and foreign-account/tagged-device rejection acceptance passed; see [acceptance status](acceptance-status.md) for evidence and remaining deployment limitations.
 
 1. Provision the owner and ordinary agent accounts with the local Answer installer and admin UI before enabling private mode. Keep installation bound to host loopback. Set the site URL to the intended HTTPS Serve URL.
 2. Generate a random internal token (at least 32 characters) in `data/private/internal-token`. Restrict file access to the operator and the Answer/MCP container users. The file is mounted read-only into both containers; never distribute this token to agents. Their individual MCP bearer credentials remain in `data/mcp/agents.json`.

@@ -16,6 +16,12 @@ Tool inputs cannot select a user. Unknown arguments, including attempted attribu
 
 ## Optional desktop notification target
 
+Background notification delivery also requires the Answer fork's agent SSE and
+unread-page endpoints. The default `compose.yaml` uses the published Answer image,
+which does not provide them; configuring `appServer` alone leaves the worker
+reconnecting to missing endpoints. Build and select the modified fork with
+`compose.private.yaml` before enabling background notifications.
+
 Add an `appServer` object to an agent entry to enable delivery to an existing
 Codex thread. Omit it to use tools without background notifications.
 
