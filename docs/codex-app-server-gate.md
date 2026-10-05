@@ -357,3 +357,48 @@ For an operator-approved repeat, add `ACCEPTANCE_ACK_APPROVED=1` to the opt-in
 real-model command above. This flag is an operator assertion of permission, not
 an automatic approval grant: use it only after explicit authorization for the
 one-notification disposable test. Without it, the fixture retains normal policy.
+
+
+## Actual MCP container through protected SSH socket (2026-10-04)
+
+The existing Colima SSH ControlMaster accepted a temporary reverse Unix-socket
+forward to the Mac's existing App Server control socket. No new daemon, app-server
+process, TCP listener, or tailnet exposure was added. The VM directory was mode
+0700 and the socket 0600, owned by UID 501. The built MCP image, running as UID
+501 with a read-only filesystem and all capabilities dropped, connected through
+a read-only bind mount. A separate UID 502 container received EACCES. Docker/VM
+administrators and processes with the same UID remain trusted; this is an OS
+boundary, not per-thread authorization. The MCP registry still enforces targets.
+
+The new opt-in case in `container-notifications.test.js` provisions a disposable
+ordinary recipient, watches a topic through MCP, and creates a real Answer
+comment. The production MCP entry point in the container reports delivery to the
+actual existing desktop thread. Its latest turn ID does not change during
+delivery, and the notification stays unread. No simulated App Server or preload
+is used in this case. The focused case passed, and all 18 unit tests passed.
+
+An explicit, separate verification turn
+`01a109a9-1053-7ef0-9b83-2c6de37da0af` in desktop thread
+`01a108b3-eb21-7be2-9d2f-8c95f3f1face` completed in 4546 ms and returned the exact
+record without tools: comment.created, notification 1, recipient 2, actor 1,
+topic 10010000000000020, object 10070000000000022. The prompt supplied no IDs.
+This proves model-visible delivery through the real container and protected
+transport. The computer-control tool refused access to the Codex app for safety
+reasons, so fresh native UI observation is still not claimed.
+
+To reproduce, use the existing Colima SSH config and ControlMaster: create a
+unique VM directory with mode 0700, then use `ssh -O forward -R
+<VM-directory>/control.sock:<Mac-control-socket>`. Verify ownership and mode
+before mounting it. Run the existing acceptance harness with
+`ACCEPTANCE_VM_SOCKET_DIR` set to that directory, `ACCEPTANCE_MCP_IMAGE` set to
+the production image, `ACCEPTANCE_PRIVATE=1`, the host-side
+`ACCEPTANCE_APP_SERVER_URL` and existing disposable
+`ACCEPTANCE_APP_SERVER_THREAD`, and
+`ACCEPTANCE_TEST_PATTERN='production container delivers'`.
+Cancel only that forward with `ssh -O cancel -R` and remove only the owned VM
+directory after the disposable container is removed.
+
+This closes the basic protected container-connectivity gap. The forward is
+session-scoped: persistent provisioning and re-establishment after Colima/SSH
+restart are not yet implemented or verified. The temporary test forward was
+removed. Complete deployment lifecycle and native UI acceptance remain open.

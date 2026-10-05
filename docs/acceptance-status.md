@@ -74,7 +74,7 @@ For an already installed **disposable** Answer instance, supply `ACCEPTANCE_ANSW
 - Local two-container/private/browser suite passes, including independent authors, owner posting without forum login, restart persistence, concurrent renewal, revocation, suspension, fresh client initialization, and native watcher notification eligibility.
 - [Push CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221924619) and [PR CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221926940) both passed on `05cbf8499631cf4cfbe330bee2b731f2031dec8b`, including both-container persistence and private browser acceptance.
 
-The latest real two-container/private/browser suite also passes authenticated SSE receipt, cursor recovery without marking read, and suspension closing the stream. Worker transport tests pass isolation, overlap reconciliation, missed-event recovery, coalescing, permission filtering, and hot credential revocation. Full actual-desktop/tailnet deployment, negative device-policy cases, fresh native UI and protected container-to-actual-desktop connectivity remain outstanding. With explicit owner approval, the model now reads a pushed comment through real MCP and acknowledges exactly its notification; Answer unread state and removal of the temporary test permission were verified. Real browser resolution and explicit unwatch now pass through model-visible delivery. Real comments/mentions now pass the live worker and model-context verification, including reply-plus-mention routing. Repeated acknowledgement also preserves other unread badge counts. See the dated real Answer context run in [the App Server report](codex-app-server-gate.md).
+The latest real two-container/private/browser suite also passes authenticated SSE receipt, cursor recovery without marking read, and suspension closing the stream. Worker transport tests pass isolation, overlap reconciliation, missed-event recovery, coalescing, permission filtering, and hot credential revocation. Full actual-desktop/tailnet deployment, negative device-policy cases, fresh native UI and durable deployment lifecycle remain outstanding. Protected container-to-actual-desktop delivery now passes through a temporary owner-only SSH Unix-socket forward; its restart provisioning remains unverified. With explicit owner approval, the model now reads a pushed comment through real MCP and acknowledges exactly its notification; Answer unread state and removal of the temporary test permission were verified. Real browser resolution and explicit unwatch now pass through model-visible delivery. Real comments/mentions now pass the live worker and model-context verification, including reply-plus-mention routing. Repeated acknowledgement also preserves other unread badge counts. See the dated real Answer context run in [the App Server report](codex-app-server-gate.md).
 
 ## Notification container restart regression (2026-10-04)
 
@@ -90,7 +90,7 @@ live App Server connection; the other principal continues receiving events.
 The App Server observer is a test-only Node preload bound to container loopback,
 not a production component and not actual Codex context evidence. The production
 Dockerfile does not copy it. This closes the container lifecycle regression gap
-while leaving complete protected container-to-Mac desktop deployment unverified.
+while leaving complete deployment lifecycle unverified. A subsequent opt-in real-container check proves protected SSH Unix-socket delivery to the actual Mac App Server; see the App Server report.
 An opt-in baseline/worker resource sample reports process CPU/RSS, container network traffic, and metadata payload sizes; see the App Server report. The fixture tolerates only the observed transient ENOENT when checking an atomic
 credential-file replacement through Colima; production continues to fail closed.
 
@@ -110,3 +110,19 @@ removes an independently verified synchronization ambiguity. Production delivery
 code is unchanged. Subsequent Linux CI passed, including both jobs on
 [`56bfb50`](https://github.com/tdyin/agentic-anwsers/actions/runs/37242501573),
 confirming the corrected fixture passes in CI.
+
+
+## Device and desktop follow-up (2026-10-04)
+
+The operator reported Timber showed the connectivity probe on 8443 while 8444
+did not load. This is user-observed expected allow/deny behavior; no packet trace
+or exact browser error was collected. The operator declined further device
+checks, so G16, McFlurry, and the phone positive control under the new policy
+remain unverified. The earlier phone evidence predates this policy.
+
+The real production MCP container now delivers a real Answer notification through
+an owner-only SSH Unix socket to the existing Mac App Server. An explicit model
+verification returned its exact identifiers without tools. Fresh native UI
+observation is blocked by the computer-control tool's app safety restriction,
+not by a newly requested macOS Accessibility permission. Persistent transport
+setup and restart recovery remain to be integrated; see the dated App Server run.

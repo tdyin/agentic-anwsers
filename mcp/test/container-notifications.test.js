@@ -6,12 +6,55 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acceptanceWatcher } from '../scripts/acceptance-watcher.js';
+import { AppServerClient } from '../src/app-server.js';
 
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 async function until(check, label) {
   for (let i = 0; i < 150; i++) { if (await check()) return; await delay(200); }
   assert.fail(label);
 }
+
+test('production container delivers a real notification to the existing desktop through an SSH-forwarded Unix socket', {
+  skip: !process.env.ACCEPTANCE_VM_SOCKET_DIR,
+}, async t => {
+  assert.ok(process.env.ACCEPTANCE_MCP_IMAGE && process.env.ACCEPTANCE_INTERNAL_TOKEN);
+  const target = { url: process.env.ACCEPTANCE_APP_SERVER_URL, threadId: process.env.ACCEPTANCE_APP_SERVER_THREAD };
+  const control = new AppServerClient({ target });
+  t.after(() => control.close());
+  await control.connect();
+  const before = await control.request('thread/turns/list', { threadId: target.threadId, limit: 1 });
+  const watcher = await acceptanceWatcher(t, { baseUrl: process.env.ACCEPTANCE_ANSWER_URL,
+    internalToken: process.env.ACCEPTANCE_INTERNAL_TOKEN, label: 'ssh-container' });
+  const directory = process.env.ACCEPTANCE_WORK_DIR;
+  writeFileSync(join(directory, 'desktop-container.json'), JSON.stringify({ agents: [{ ...watcher.credentials,
+    appServer: { url: 'unix:///run/codex/control.sock', threadId: target.threadId },
+  }] }), { mode: 0o600 });
+  const name = `${process.env.ACCEPTANCE_RESTART_CONTAINER}-desktop`;
+  docker('run', '-d', '--name', name, '--network', process.env.ACCEPTANCE_NETWORK,
+    '--user', `${process.getuid()}:${process.getgid()}`, '--read-only', '--cap-drop=ALL',
+    '--mount', `type=bind,src=${process.env.ACCEPTANCE_VM_SOCKET_DIR},dst=/run/codex,readonly`,
+    '-v', `${directory}:/run/acceptance:ro`, '-e', 'ANSWER_BASE_URL=http://answer',
+    '-e', 'MCP_AGENTS_FILE=/run/acceptance/desktop-container.json',
+    '-e', 'ANSWER_INTERNAL_TOKEN_FILE=/run/acceptance/internal-token', process.env.ACCEPTANCE_MCP_IMAGE);
+  t.after(() => docker('rm', '-f', '-v', name));
+  const topic = await watcher.admin.call('question', { method: 'POST', body: {
+    title: 'Protected container desktop delivery', content: 'Disposable SSH socket acceptance.', tags: [{ slug_name: 'socket-test' }],
+  } });
+  await watcher.call('watch_topic', { topic_id: topic.id });
+  const comment = await watcher.admin.call('comment', { method: 'POST', body: {
+    object_id: topic.id, original_text: `Protected container event ${randomUUID()}`,
+  } });
+  const event = await watcher.event('comment.created', comment.comment_id);
+  await until(() => docker('logs', name).split('\n').some(line => {
+    try { const row = JSON.parse(line); return row.component === 'notifications' && row.agent === 'ssh-container' && row.status === 'delivered' && row.count === 1; }
+    catch { return false; }
+  }), 'production worker reports successful delivery');
+  const after = await control.request('thread/turns/list', { threadId: target.threadId, limit: 1 });
+  assert.deepEqual(after.data.map(turn => turn.id), before.data.map(turn => turn.id), 'context delivery starts no model turn');
+  const unread = await watcher.answer.call('notification/agent/page', { query: { after: '0', limit: 100 } });
+  assert.ok(unread.events.some(row => row.notificationId === event.notificationId), 'delivery leaves notification unread');
+  console.log(`Protected container desktop verification required: ${JSON.stringify({ threadId: target.threadId, event })}`);
+});
 
 test('two notification workers retain routing and unread state across both-container restart and live revocation', {
   skip: !process.env.ACCEPTANCE_MCP_IMAGE || !process.env.ACCEPTANCE_INTERNAL_TOKEN,
