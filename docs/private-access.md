@@ -88,3 +88,31 @@ previous separation between browser/Serve and container/desktop evidence; see
 [the combined run](codex-app-server-gate.md#real-servebrowser-to-production-container-and-desktop-2026-10-04).
 The test ran on the serving Mac and does not substitute for remaining remote
 negative identity/device cases.
+
+
+## Foreign-account follow-up (2026-10-04)
+
+A disposable official Tailscale userspace node served private Answer fork
+`59855aab` on HTTPS 8444. Its addresses were excluded from broad network grants;
+only that port was allowed for members and accepted shared users. The operator
+accepted a one-use node share from an iPhone on a separate Tailscale account.
+Owner profile access returned HTTP 200. The operator confirmed the second-account
+phone reached `/healthz` (`OK`) while `/answer/api/v1/user/info` returned
+Forbidden/403. This completes the actual foreign-account rejection check.
+Tagged-device rejection remains outstanding; the temporary test infrastructure
+and share will be removed after testing.
+
+
+## Tagged-device follow-up and cleanup (2026-10-04)
+
+The disposable owner client first returned HTTP 200 from the profile endpoint
+over actual Serve HTTPS. After applying `tag:agentic-rejection-client`, Tailscale
+reported its tag and replacement identity; the same network path returned
+HTTP 200 / `OK` for health and HTTP 403 for the forum profile. Certificate
+verification remained enabled and no identity headers were injected.
+The repaired server used `agentic-rejection-test-1` with fork `59855aab`.
+
+The operator removed the foreign-account share. Both test-node credentials
+were then logged out; owned containers, volumes, test Serve mappings, and
+temporary policy changes were removed. Existing operator devices were not
+retagged. Actual foreign and tagged identity rejection acceptance now passes.
