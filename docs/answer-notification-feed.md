@@ -70,3 +70,16 @@ activity rows exist, including self-accepted answers. Self recipients are
 suppressed while other followers still receive the event. No follow is removed
 automatically. Real Chrome acceptance, native state readback, live delivery, and
 explicit MCP unwatch are covered by the private browser fixture.
+
+
+## Service failures and graceful shutdown
+
+Account lookup failures return HTTP 503 before the unread response or SSE
+stream begins; missing or unavailable accounts still return 403. If a repository
+failure occurs on an established stream, it emits `event: error` with
+`{"code":"service_unavailable","retryable":true}` and closes, allowing reconnect
+and unread recovery without treating the failure as revocation.
+
+Follower fan-out finishes within the notification queue's current handler. Child
+notifications use the worker context to process inline, so shutdown drains them
+and fan-out cannot deadlock by filling the single worker's own queue buffer.

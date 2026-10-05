@@ -64,7 +64,7 @@ Forks are recorded as Git submodules:
 
 | Path | Fork | Pinned revision |
 | --- | --- | --- |
-| `vendor/answer` | [tdyin/answer](https://github.com/tdyin/answer) | `59855aabd8809b7041d56c8e04813e7aaf1ebe50` (private-access changes on v2.0.2) |
+| `vendor/answer` | [tdyin/answer](https://github.com/tdyin/answer) | `ca312a63cb75ae71222cd46301b10c17ba6f3188` (private-access changes on v2.0.2) |
 | `vendor/answer-cli` | [tdyin/answer-cli](https://github.com/tdyin/answer-cli) | `a4666c48fba5970cc7bcef5616afb7aa0e444b11` |
 
 Compose uses the published Answer 2.0.2 image. The Answer source pin matches the adapter's verified API contract; the fork's current `main` is newer. A submodule update alone does not change deployment: build and select your fork's image explicitly when modifications are necessary. `answer-cli` offers an optional stdio MCP implementation and is included for future work; the default stack uses the HTTP adapter in `mcp/`. The Answer fork includes the opt-in private-access boundary; answer-cli remains unmodified. Use [the private overlay and setup](docs/private-access.md) to explicitly build/select the modified image. See [acceptance status](docs/acceptance-status.md) for configured-path evidence and deployment limitations.

@@ -212,3 +212,27 @@ tailnet policy no longer contains the test tag, test grant, or test-server
 exclusions. Existing operator-device restrictions and policy tests remain.
 Logged-out device records may remain in the Tailscale admin inventory; they
 have no live test endpoint or retained credentials.
+
+
+## Vendor review regressions (2026-10-05)
+
+Fork `ca312a63cb75ae71222cd46301b10c17ba6f3188` addresses the vendor review:
+private mode now uses the configured API/UI prefixes and blocks external
+connector and user-center authentication/registration routes; notification
+account-repository errors return retryable service failures rather than 403;
+follower fan-out completes within the notification queue's draining handler.
+
+Targeted regressions first reproduced all three findings. The affected Go
+package suite passes after the fixes, including middleware, controller, auth,
+notification, repository, queue, content, review, activity, and server compilation.
+Race-enabled queue/notification/controller tests also pass, including shutdown
+waiting for a fan-out-only seed and draining ten children through a one-slot queue.
+The adapter suite passes 18 tests with six opt-in skips.
+
+The local Docker rebuild was blocked by exhausted Docker VM storage during
+plugin packaging. Unused Answer cache was reclaimed, but no unrelated image or
+service data was removed. Docker-backed private/browser and restart acceptance
+is validated by the integration PR's clean CI runner using the new submodule
+pin; the workflow now includes the queue regression package. Earlier actual
+Tailscale and desktop observations remain historical evidence on their recorded
+fork revisions, rather than claims of repeating those manual tests for this fix.
