@@ -1,27 +1,29 @@
 import express from 'express';
-import { timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { AnswerClient } from './answer.js';
+import { AgentRegistry } from './agents.js';
 import { createServer } from './tools.js';
+import { startNotifications } from './notifications.js';
 
-export function createApp({ answer, authToken, allowedHosts = ['localhost', '127.0.0.1'] }) {
-  if (!authToken || authToken.length < 32 || authToken.startsWith('replace-')) throw new Error('MCP_AUTH_TOKEN must be a random token of at least 32 characters.');
+export function createApp({ agents, allowedHosts = ['localhost', '127.0.0.1'] }) {
+  if (!agents) throw new Error('Configure an agent credential registry.');
   const app = express();
   app.disable('x-powered-by');
   app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
   app.use('/mcp', (req, res, next) => {
     if (!allowedHosts.includes(req.hostname)) return res.status(403).json({ error: 'Host not allowed' });
     if (req.headers.origin) return res.status(403).json({ error: 'Browser origins not supported' });
-    const actual = Buffer.from(req.headers.authorization || '');
-    const expected = Buffer.from(`Bearer ${authToken}`);
-    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-      return res.status(401).json({ error: 'Invalid MCP bearer token' });
+    try {
+      req.agent = agents.authenticate(req.headers.authorization);
+    } catch {
+      return res.status(503).json({ error: 'Agent authentication unavailable' });
     }
+    if (!req.agent) return res.status(401).json({ error: 'Invalid MCP bearer token' });
     next();
   });
   app.post('/mcp', express.json({ limit: '256kb' }), async (req, res) => {
-    const server = createServer(answer);
+    const server = createServer(req.agent.answer);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => { void transport.close(); void server.close(); });
     try {
@@ -37,9 +39,14 @@ export function createApp({ answer, authToken, allowedHosts = ['localhost', '127
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { ANSWER_BASE_URL = 'http://localhost:9080', ANSWER_AGENT_EMAIL, ANSWER_AGENT_PASSWORD, MCP_AUTH_TOKEN, MCP_ALLOWED_HOSTS = 'localhost,127.0.0.1' } = process.env;
-  if (!ANSWER_AGENT_EMAIL || !ANSWER_AGENT_PASSWORD || ANSWER_AGENT_PASSWORD.startsWith('replace-')) throw new Error('Configure the Answer agent account credentials.');
-  const answer = new AnswerClient({ baseUrl: ANSWER_BASE_URL, email: ANSWER_AGENT_EMAIL, password: ANSWER_AGENT_PASSWORD });
-  const listener = createApp({ answer, authToken: MCP_AUTH_TOKEN, allowedHosts: MCP_ALLOWED_HOSTS.split(',').map(h => h.trim()) }).listen(3000, '0.0.0.0', () => console.log('Agentic Answers MCP listening on port 3000'));
-  for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => listener.close(() => process.exit(0)));
+  const { ANSWER_BASE_URL = 'http://localhost:9080', MCP_AGENTS_FILE, ANSWER_INTERNAL_TOKEN_FILE, MCP_ALLOWED_HOSTS = 'localhost,127.0.0.1' } = process.env;
+  if (!MCP_AGENTS_FILE) throw new Error('Set MCP_AGENTS_FILE to the operator-owned credential file.');
+  const internalToken = ANSWER_INTERNAL_TOKEN_FILE ? readFileSync(ANSWER_INTERNAL_TOKEN_FILE, 'utf8').trim() : undefined;
+  const agents = new AgentRegistry({ file: MCP_AGENTS_FILE, baseUrl: ANSWER_BASE_URL, internalToken });
+  const stopNotifications = startNotifications(agents, { report: (agent, status, count) => console.log(JSON.stringify({ component: 'notifications', agent, status, ...(count === undefined ? {} : { count }) })) });
+  const listener = createApp({ agents, allowedHosts: MCP_ALLOWED_HOSTS.split(',').map(h => h.trim()) }).listen(3000, '0.0.0.0', () => console.log('Agentic Answers MCP listening on port 3000'));
+  for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, async () => {
+    await stopNotifications();
+    listener.close(() => process.exit(0));
+  });
 }

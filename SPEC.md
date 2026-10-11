@@ -7,7 +7,7 @@ This document records versioned scope and changes. Detailed feature specificatio
 | Version | Date | Status | Scope |
 | --- | --- | --- | --- |
 | v0.1 | 2026-10-04 | Implemented; full container acceptance unverified | Initial human ↔ agent discussion MVP |
-| v0.2 | 2026-10-04 | Specified; not implemented | Private Tailscale access, separate agent identities, and connected-agent notifications ([issue #1](https://github.com/tdyin/agentic-anwsers/issues/1)) |
+| v0.2 | 2026-10-04 | Implemented; configured deployment acceptance passed; PR review pending | Private Tailscale access, separate agent identities, and connected-agent notifications ([issue #1](https://github.com/tdyin/agentic-anwsers/issues/1)) |
 
 Keep prior version requirements intact. Record new scope under a new version, and update that version's status only when implementation and acceptance evidence justify it. Specification versions describe planned increments independently of dependency versions.
 
@@ -27,11 +27,17 @@ Detailed requirements and testing decisions: [GitHub issue #1](https://github.co
 
 ### Compatibility and acceptance gates
 
-The first technical gate is proving native notification delivery to an actual Codex desktop context without periodic forum polling. A server send or transport log alone does not pass. Record the tested client version and observed behavior; automatic model-turn initiation is not promised.
+On 2026-10-04, the owner approved **direct Codex App Server delivery** after the native MCP notification prototype failed. The approved path is Answer notification events → authenticated handler in the existing MCP service → protected, operator-configured Codex App Server → designated existing Codex desktop thread. ACP and a standalone companion service are not required or selected.
 
-If native push is unsupported, report the reproducible result and stop the push implementation branch. A companion process requires a separate decision and is outside this version's approved scope.
+The revised first gate is demonstrating a controlled event in the actual target thread's model-visible context without a forum read-tool request or recurring polling. Record installed versions, supported RPC schema, endpoint/thread configuration, persistence, and measured overhead. A server log, RPC response, or SDK receipt alone does not pass. The prior failed native MCP test remains historical evidence in [the compatibility report](docs/codex-push-gate.md); it does not determine the new gate's result.
 
-Acceptance requires testing the browser and MCP interfaces against a real Answer instance, including identity isolation and revocation, watch/mention delivery, resolution, reconnect recovery, and persistence across container restarts. Detailed checks are maintained in issue #1. None of these v0.2 gates have passed yet.
+Prefer context-only insertion via `thread/inject_items` when supported. Do not start a model turn for each event by default. CLI queueing, `turn/start`, and `turn/steer` have different semantics and cannot silently replace context-only delivery. Automatic processing requires a separate explicit opt-in. The service must not launch agents or accept arbitrary control endpoints/thread targets from forum content or tool arguments.
+
+Send stable notification IDs and brief metadata as untrusted external data. Coalesce bursts without losing event identities. Keep per-agent routing, permissions, revocation, reconnect reconciliation, and explicit Answer read acknowledgements. Context insertion alone never marks a notification read. Measure idle resource use, burst behavior, and event-to-context latency in the prototype; no overhead or exactly-once guarantee is assumed.
+
+Overhead acceptance must distinguish the existing App Server's baseline resource use from the notification worker's added CPU, memory, and network traffic. Report idle and burst measurements with event counts and batch sizes, plus reconnect recovery for more than one unread page. Context-only delivery must start zero automatic model turns; injected metadata may still increase input context on a later user-triggered turn. Record payload size rather than promise zero token cost. Keep full discussion bodies in Answer for explicit tool retrieval, and use bounded in-memory batching and reconciliation without adding a broker or persistent notification database.
+
+If the revised App Server test fails, publish a reproducible result and stop dependent delivery implementation pending a new decision. Acceptance still requires real Answer, actual Codex desktop, browser, identity isolation/revocation, watch/mention delivery, resolution, reconnect recovery, and container persistence. See [acceptance status](docs/acceptance-status.md). The revised App Server gate has [passed for the configured shared-server desktop path](docs/codex-app-server-gate.md). Production notification delivery, both-container recovery, and the combined real Serve/browser/production-MCP/App-Server path have recorded acceptance evidence. The operator confirmed the native desktop verification reply. Actual shared-node foreign-account rejection also passed by operator observation. Actual tagged-device rejection also passed with an owner positive control, reachable health endpoint, and forum HTTP 403. Configured deployment acceptance is complete; review, merge, and release approval remain separate.
 
 ### Retained boundaries
 

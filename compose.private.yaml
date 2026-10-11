@@ -1,0 +1,18 @@
+# Use with compose.yaml after operator provisioning; see docs/private-access.md.
+services:
+  answer:
+    image: agentic-answer:private
+    build: ./vendor/answer
+    environment:
+      ANSWER_TAILSCALE_OWNER: ${ANSWER_TAILSCALE_OWNER:?Set the exact owner Tailscale login}
+      ANSWER_OWNER_EMAIL: ${ANSWER_OWNER_EMAIL:?Set the provisioned Answer owner email}
+      ANSWER_TRUSTED_PROXY_CIDR: ${ANSWER_TRUSTED_PROXY_CIDR:?Set the exact Serve socket peer CIDR}
+      ANSWER_PRIVATE_ORIGIN: ${ANSWER_PRIVATE_ORIGIN:?Set the HTTPS Serve origin}
+      ANSWER_INTERNAL_TOKEN_FILE: /run/agentic-private/internal-token
+    volumes:
+      - ./data/private:/run/agentic-private:ro
+  mcp:
+    environment:
+      ANSWER_INTERNAL_TOKEN_FILE: /run/agentic-private/internal-token
+    volumes:
+      - ./data/private:/run/agentic-private:ro

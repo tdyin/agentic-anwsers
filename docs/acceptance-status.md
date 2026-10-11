@@ -1,0 +1,238 @@
+# v0.2 acceptance status
+
+Updated 2026-10-04. The configured v0.2 implementation and acceptance checks are **complete**; PR #11 awaits review and merge. PR #11 implements agent identities, watches, and an opt-in private Answer boundary. The historical native MCP test remains NOT PASSED; the owner-approved direct App Server replacement gate PASSED with a configured shared daemon and actual desktop context verification. Actual Tailscale Serve owner/browser acceptance passes on the serving Mac, and the operator confirmed access from a phone. Timber passed the operator-observed device restriction check; Foreign-account and tagged-device rejection passed through actual Tailscale Serve paths.
+
+## Current implementation and evidence
+
+| Issue | Evidence and remaining requirements |
+| --- | --- |
+| #1 overall specification | Implementation and configured deployment acceptance passed. PR review/merge and release approval remain separate. |
+| #2 App Server context-delivery gate | **PASSED for the configured shared-server desktop path.** The actual desktop recalled a freshly injected marker and a 20-event batch without tools; context-only insertion started no model turn. [Configuration, evidence, overhead, and limits](codex-app-server-gate.md). Production per-agent routing and recovery also have recorded evidence below. |
+| #3 per-agent identities | Implemented and locally validated against real Answer and HTTP MCP, including browser attribution, concurrent renewal, restrictions, revocation, strict inputs, and uncertain-write behavior. Detailed mapping below. |
+| #4 private browser access | Application boundary implemented and tested with the built fork: exact owner identity, trusted socket peer, request-scoped native permissions, registration denial, separate internal MCP credential, cross-origin denial, forged backend-header denial, and real browser owner posting. Actual Tailscale Serve identity and Chrome owner posting now pass on the serving Mac without injected headers. The operator designated G16, Timber, and McFlurry as agent devices; saved IPv4/IPv6 policy tests deny their human-browser ports while retaining MCP access. Existing operator devices remain unchanged; a disposable tagged client provided the negative identity test. The operator reported that Timber reached 8443 and could not load 8444. The operator confirmed phone access; actual foreign-account rejection passed; tagged-device rejection passed; see the dated run in [private access](private-access.md). |
+| #5 watches | Implemented with real Answer follow state, repeated calls, automatic follows, permission checks, agent isolation, fresh-client reconnect, both-container restart, and partial-write handling. Native follow-up eligibility is checked directly in Answer; this is not MCP push delivery. |
+| #6 answer push | The revised #2 compatibility gate passed. The App Server client now enforces a fixed thread target, metadata-only payloads, abort-on-revocation, and no uncertain replay, with real WebSocket tests and actual desktop marker recall. Answer SSE, per-agent workers, operator-owned targets, permission checks, batching, and live revocation are implemented. A real Answer event passed through the worker and was recalled exactly in the previously desktop-verified thread via an explicit App Server verification turn. The operator confirmed the newest resolution verification reply in the native desktop UI; two independent existing desktop threads now recall their routed records exactly, including continued delivery after the other principal is revoked; the remaining identity rejection cases now also pass. Authors answering their own questions now still notify other watchers; a real Chrome owner post and live App Server delivery verify that path. |
+| #7 comments and mentions | Comment watcher fan-out, native mention routing, self suppression, and watch/mention deduplication are implemented. Real Answer SSE tests pass question comments, answer-author comments, repeated mentions, unwatch, mention-without-watch, and existing-tool retrieval. The existing desktop thread model recalled all five real comment/mention records exactly through an explicit API-triggered verification turn, without tools. The operator subsequently confirmed the newest resolution verification reply in the native desktop UI; comment-specific model-context evidence remains as recorded. |
+| #8 resolution | Implemented and verified with the real Chrome accept-answer action, native accepted-answer state, live SSE/App Server delivery, and exact model recall of the resolution record. Self-accepted answers notify other watchers. Follow state remains intact until explicit MCP unwatch; subsequent activity is excluded while the resolution remains unread for recovery. |
+| #9 recovery | Cursor-based unread recovery and live/catch-up reconciliation are implemented and tested against real SQLite and HTTP/SSE/WebSocket transports. The explicit acknowledgement tool passes real Answer tests for idempotence, read-tool separation, and recipient isolation. A real disconnected worker recovered 101 offline events plus one live overlap in batches of 100, 1, and 1. After five explicit MCP acknowledgements and an Answer restart, a fresh worker recovered 97 unread events; the established desktop thread model recalled all 97 IDs exactly. A separate two-principal fixture now passes recovery after both Answer and MCP containers restart, with a test-only App Server protocol observer. The production MCP container now also recovers two exact unread records into the actual existing desktop after both containers restart. |
+| #10 complete deployment | Independent identity/watch/private-application loop is tested across both containers. A combined actual Serve/browser/production-container/desktop run now passes owner posting, answer and resolution delivery, explicit unwatch, both-container restart, and unread persistence. Two-agent isolation/revocation and multipage recovery have separate recorded evidence. The operator confirmed the native desktop verification reply. Foreign-account and tagged-device denial passed. |
+
+## Issue #3 acceptance mapping
+
+| Requirement | Evidence |
+| --- | --- |
+| Operator provisioning and separate secrets | [Credential setup](agent-credentials.md); real test provisions role-1 ordinary users through Answer's admin API. Secrets live in ignored fixture/operator files. |
+| Topic, answer, comment attribution for two clients | `answer-acceptance.test.js` verifies author IDs from real Answer; `private-acceptance.test.js` verifies Alice and Bob in the actual browser UI. |
+| Credential selects principal; no argument override | Strict tool schemas; HTTP SDK override-rejection regression. Separate user/password sessions selected solely by bearer mapping. |
+| Concurrent requests and session renewal | HTTP regression plus real concurrent comment writes after an Answer-only restart while both MCP sessions remain cached. Author IDs remain distinct. |
+| Permissions and restrictions; no admin substitution | Real provisioned accounts are asserted role 1; suspension blocks cached-session writes and follows while the other agent still posts. |
+| Revocation and lifecycle seam | Atomic credential-file replacement rejects the removed bearer while the other works. Removed registry entries abort their revocation signal. A one-second local credential-file supervisor now aborts live Answer/App Server access without requiring a new MCP request; HTTP/SSE/WebSocket regressions verify the other agent stays usable. |
+| Existing tools, validation, errors, no uncertain-write retry | Existing real-HTTP SDK mappings retained; invalid arguments, sanitized permission errors, and one-attempt network-failed writes are tested. |
+| SDK and real backend evidence | Both adapter regression and disposable Docker acceptance suites pass locally; CI runs both. |
+
+## Issue #5 acceptance mapping
+
+| Requirement | Evidence |
+| --- | --- |
+| String IDs, including short IDs; native follow state | MCP schemas preserve strings. HTTP regression resolves a short ID via question visibility lookup; real Answer follows are read back through MCP. |
+| Repeat operations, per-agent permissions | Repeated watch/unwatch pass; another agent remains unwatched; suspended users and forbidden visibility checks cannot mutate follows. |
+| Automatic following and follow-up eligibility | Topic and answer writes return `watch.established`; real follow state is asserted. A non-author joins by replying and receives a subsequent human-answer notification in Answer's native inbox. |
+| Unwatch survives reads, reconnect, restart | Explicit unwatch is checked after reads, initialization of a new SDK client, and restarting both the Answer and MCP containers. |
+| Isolation and Answer persistence | Two independent ordinary users, separate follows, SQLite-backed restart evidence; no adapter subscription database. |
+| Partial outcome without duplicate writes | HTTP failure test makes following fail after topic creation, verifies the successful content ID and recovery message, and asserts a single content write. |
+| Real MCP/Answer and denial coverage | Real HTTP clients target either the local adapter or its built Docker image; native follow state and suspension denials are asserted. |
+
+The native-inbox check uses bounded test synchronization with Answer's asynchronous queue. It is not an agent polling feature, a new notification implementation, or evidence of native Codex push.
+
+## Reproduction
+
+From `mcp/`, install pinned dependencies and run `pnpm test`. Eighteen adapter/transport tests pass; opt-in integration tests skip unless configured.
+
+From the repository root, run the complete locally available integration checks:
+
+```sh
+docker build -t agentic-answer:private vendor/answer
+docker build -t agentic-acceptance-mcp mcp
+cd mcp
+pnpm exec playwright install chromium
+ACCEPTANCE_MCP_IMAGE=agentic-acceptance-mcp ACCEPTANCE_PRIVATE=1 ACCEPTANCE_BROWSER=1 pnpm test:acceptance
+```
+
+Alternatively set `ACCEPTANCE_CHROME_PATH` to an installed Chrome executable. The harness owns uniquely named disposable containers, an isolated network, an anonymous SQLite volume, and temporary credentials under ignored `data/acceptance/`. It cleans up those fixtures and does not touch existing deployments. MCP runs with the fixture owner's UID, a read-only filesystem, and dropped capabilities. The temporary browser proxy is inside the test process and is not a deployment component.
+
+The fixture checks content/accounts/follows after both-container restart, then separately restarts Answer while MCP retains cached sessions to test concurrent renewal. Docker Desktop/Colima bind mounts can briefly return ENOENT after host-side atomic rename; the fixture waits for the new file to become observable inside the container. The adapter fails closed while configuration is unreadable.
+
+For an already installed **disposable** Answer instance, supply `ACCEPTANCE_ANSWER_URL`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` and run `node --test test/answer-acceptance.test.js` from `mcp/`. The test creates users/content. `ACCEPTANCE_RESTART_CONTAINER`, if supplied, must name that disposable container. Omitting `ACCEPTANCE_MCP_IMAGE` uses an in-process adapter and is not two-container restart evidence.
+
+## Versions and results
+
+- Answer contract baseline: `3b9f1370612e690a0b7f230f05e688930db4c6d3` / published 2.0.2.
+- Modified fork: `59855aab` (adds explicit expiry rejection for private MCP reads; see restart regression below), explicitly built as `agentic-answer:private`.
+- Bundled plugins pinned to connector-basic 1.2.12, reviewer-basic 1.0.8, captcha-basic 1.0.6, and quick-links 1.0.3.
+- Docker 29.5.2; local Node 26.8.1; adapter image Node 24; MCP SDK 1.28.0; Go test image 1.25 Alpine; Playwright 1.63.0; local Chrome 154.0.8037.93.
+- Fork middleware and request-session lifecycle tests pass. Compose configuration validation and both images build successfully.
+- Local two-container/private/browser suite passes, including independent authors, owner posting without forum login, restart persistence, concurrent renewal, revocation, suspension, fresh client initialization, and native watcher notification eligibility.
+- [Push CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221924619) and [PR CI](https://github.com/tdyin/agentic-anwsers/actions/runs/37221926940) both passed on `05cbf8499631cf4cfbe330bee2b731f2031dec8b`, including both-container persistence and private browser acceptance.
+
+An intermediate real two-container/private/browser suite passed authenticated SSE receipt, cursor recovery without marking read, and suspension closing the stream. At that point, the full configured desktop/tailnet path and negative device-policy cases were still outstanding; subsequent acceptance evidence is recorded in the dated [App Server report](codex-app-server-gate.md) and below. Worker transport tests pass isolation, overlap reconciliation, missed-event recovery, coalescing, permission filtering, and hot credential revocation. Protected container-to-actual-desktop delivery passed through a temporary owner-only SSH Unix-socket forward; its restart provisioning remains unverified. With explicit owner approval, the model reads a pushed comment through real MCP and acknowledges exactly its notification; Answer unread state and removal of the temporary test permission were verified. Real browser resolution and explicit unwatch now pass through model-visible delivery. Real comments/mentions pass the live worker and model-context verification, including reply-plus-mention routing. Repeated acknowledgement also preserves other unread badge counts. See the dated real Answer context run in [the App Server report](codex-app-server-gate.md).
+
+## Notification container restart regression (2026-10-04)
+
+`container-notifications.test.js` runs the production MCP entry point in the built
+container with two provisioned ordinary Answer principals and distinct thread
+targets. It verifies separate watcher delivery, explicitly acknowledges one
+principal's event, stops MCP, generates offline activity, and restarts Answer
+then MCP. A unique per-process boot ID confirms a fresh MCP process. Each target
+recovers exactly its own persistent unread IDs, the consumed ID stays absent,
+and both native watches remain established. Removing one credential closes its
+live App Server connection; the other principal continues receiving events.
+
+The App Server observer is a test-only Node preload bound to container loopback,
+not a production component and not actual Codex context evidence. The production
+Dockerfile does not copy it. This closes the container lifecycle regression gap
+while leaving complete deployment lifecycle unverified. A subsequent opt-in real-container check proves protected SSH Unix-socket delivery to the actual Mac App Server; see the App Server report.
+An opt-in baseline/worker resource sample reports process CPU/RSS, container network traffic, and metadata payload sizes; see the App Server report. The fixture tolerates only the observed transient ENOENT when checking an atomic
+credential-file replacement through Colima; production continues to fail closed.
+
+### Revocation synchronization correction
+
+[CI on `9897a85`](https://github.com/tdyin/agentic-anwsers/actions/runs/37240713972)
+failed the new container fixture with two injections where one was expected.
+Its wait accepted any closed connection for the thread, including a connection
+that failed during Answer restart, rather than the connection currently delivering
+notifications. The fixture now identifies each connection and waits for that exact
+live connection to close before creating post-revocation activity. It deliberately
+closes the first connection per thread so an earlier disconnect is always present;
+the test also asserts that the delivering connection remains open before removal.
+The focused local scenario passes. A counterfactual run with the old wait also
+passed locally, so CI's exact timing was not reproduced on Colima; the correction
+removes an independently verified synchronization ambiguity. Production delivery
+code is unchanged. Subsequent Linux CI passed, including both jobs on
+[`56bfb50`](https://github.com/tdyin/agentic-anwsers/actions/runs/37242501573),
+confirming the corrected fixture passes in CI.
+
+
+## Device and desktop follow-up (2026-10-04)
+
+The operator reported Timber showed the connectivity probe on 8443 while 8444
+did not load. This is user-observed expected allow/deny behavior; no packet trace
+or exact browser error was collected. The operator declined further device
+checks, so G16, McFlurry, and the phone positive control under the new policy
+remain unverified. The earlier phone evidence predates this policy.
+
+The real production MCP container now delivers a real Answer notification through
+an owner-only SSH Unix socket to the existing Mac App Server. An explicit model
+verification returned its exact identifiers without tools. Fresh native UI
+observation is blocked by the computer-control tool's app safety restriction,
+not by a newly requested macOS Accessibility permission. Persistent transport
+setup and restart recovery remain to be integrated; see the dated App Server run.
+
+
+### Private-session read recovery
+
+The actual-desktop container test now verifies offline activity and both-container
+restart against the real shared App Server. It exposed and now covers expired
+internal read sessions returning anonymous follow state. Fork `59855aab` returns
+401 for that case; per-agent renewal restores the persisted watch. The rebuilt
+image passes this scenario, the direct expired-read regression, all four normal
+private/browser integration cases, and the middleware/auth Go checks. An explicit
+model turn returned both exact recovered records without tools. VM/SSH restart
+provisioning and native UI observation remain separate limitations.
+
+
+## Combined actual Serve and desktop path (2026-10-04)
+
+The opt-in protected-container case now also accepts an actual Tailscale Serve
+origin. The harness refuses an occupied test port, maps only owned HTTPS 8444,
+and removes only its matching mapping during cleanup. A fresh Chrome context
+uses real Serve identity headers with no injected identity or certificate bypass.
+It posts and accepts an answer after both-container recovery, verifies owner
+attribution, reads/unwatches through the production container's authenticated
+HTTP MCP endpoint, and confirms resolution remains unread and later watch
+activity is excluded. The actual existing App Server receives the events through
+the protected socket. A separate explicit model turn recalls the exact newest
+resolution record without tools. This combined path passed in 15.91 seconds;
+see the App Server report for event IDs and reproduction. Native Codex UI
+observation is still not claimed.
+
+
+## Operator desktop confirmation and rejection-test resumption
+
+The operator opened “App Server context injection control” and answered “I see
+it” when asked about the latest verification reply containing topic.resolved and
+notificationId 4. This is user-observed native UI evidence for the combined run;
+the automation tool still cannot access the Codex app directly.
+
+The operator initially skipped the remaining foreign/tagged-device tests, then
+explicitly resumed them. A disposable userspace Tailscale node and private Answer instance were created
+without retagging or signing out any existing device. The operator authenticated
+the test node in the owner's tailnet, saved the restricted access rule, and
+accepted its one-use sharing invitation from the second account.
+
+
+## Actual foreign-account rejection (2026-10-04)
+
+The disposable `agentic-rejection-test` node runs official Tailscale 1.102.4
+and private Answer fork `59855aab`, with its own SQLite volume and HTTPS Serve
+on port 8444. It exposes no host ports, subnet routes, exit node, or public
+Funnel. The operator saved a rule excluding both test-node addresses from the
+broad destination grant and allowing only TCP 8444 to the node for members and
+accepted shared users. The admin UI confirmed the intended second account's
+share. Owner profile and health requests returned HTTP 200 over actual HTTPS.
+
+On the iPhone connected to its separate Tailscale account, the operator confirmed
+`/healthz` displayed `OK` and `/answer/api/v1/user/info` displayed Forbidden/403
+(“Yes as you said”). This is user-observed real network-path foreign-account
+rejection, rather than an unreachable-network result or injected identity-header
+fixture. Tagged-device rejection subsequently passed as recorded below. The operator
+removed the foreign-account share before that test.
+
+
+## Actual tagged-device rejection and cleanup (2026-10-04)
+
+A separate disposable Tailscale 1.102.4 userspace client authenticated as the
+owner. After repairing the disposable server's stale authorization/network
+session, the server used `agentic-rejection-test-1` and the same private Answer
+fork `59855aab` and SQLite data. No existing operator device was retagged.
+The client first returned HTTP 200 from `/answer/api/v1/user/info` as an
+untagged owner. The operator approved the temporary tag owner definition and
+TCP 8444 grant to this server. Tailscale then reported the client with
+`tag:agentic-rejection-client` and a replacement user identity.
+
+Actual HTTPS requests through that client's Tailscale SOCKS proxy returned
+`OK` / HTTP 200 from `/healthz` and HTTP 403 from the forum profile endpoint.
+The proxy used the actual node address while retaining the MagicDNS hostname
+for TLS verification; no identity headers or certificate bypass were supplied.
+This distinguishes missing tagged-user identity rejection from network denial.
+
+After testing, both test-node credentials were logged out, the test Serve
+endpoint was disabled, all six owned test containers and their volumes were
+removed, and the matching host static-probe mapping was removed. The saved
+tailnet policy no longer contains the test tag, test grant, or test-server
+exclusions. Existing operator-device restrictions and policy tests remain.
+Logged-out device records may remain in the Tailscale admin inventory; they
+have no live test endpoint or retained credentials.
+
+
+## Vendor review regressions (2026-10-05)
+
+Fork `ca312a63cb75ae71222cd46301b10c17ba6f3188` addresses the vendor review:
+private mode now uses the configured API/UI prefixes and blocks external
+connector and user-center authentication/registration routes; notification
+account-repository errors return retryable service failures rather than 403;
+follower fan-out completes within the notification queue's draining handler.
+
+Targeted regressions first reproduced all three findings. The affected Go
+package suite passes after the fixes, including middleware, controller, auth,
+notification, repository, queue, content, review, activity, and server compilation.
+Race-enabled queue/notification/controller tests also pass, including shutdown
+waiting for a fan-out-only seed and draining ten children through a one-slot queue.
+The adapter suite passes 18 tests with six opt-in skips.
+
+The local Docker rebuild was blocked by exhausted Docker VM storage during
+plugin packaging. Unused Answer cache was reclaimed, but no unrelated image or
+service data was removed. Docker-backed private/browser and restart acceptance
+is validated by the integration PR's clean CI runner using the new submodule
+pin; the workflow now includes the queue regression package. Earlier actual
+Tailscale and desktop observations remain historical evidence on their recorded
+fork revisions, rather than claims of repeating those manual tests for this fix.

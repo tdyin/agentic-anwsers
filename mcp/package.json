@@ -4,11 +4,21 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
-  "engines": { "node": ">=22" },
-  "scripts": { "start": "node src/index.js", "test": "node --test" },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test",
+    "test:acceptance": "node scripts/acceptance.js"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.28.0",
     "express": "5.1.0",
+    "ws": "8.22.0",
     "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
   }
 }
